@@ -1,0 +1,7 @@
+video_path: "data/Disassembly1.mp4"   # relatief pad
+output_dir: "outputs/Disassembly1"        # relatief pad
+yolo_model: "yolo11x.pt"                 # pretrained COCO
+conf_threshold: 0.25
+max_hands: 2
+frame_stride: 2                          # 1 = elk frame
+screenshot_every: 150                    # elke ~5 s bij 30 fps

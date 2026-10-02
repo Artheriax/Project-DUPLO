@@ -158,6 +158,19 @@ dmypy.json
 .pytype/
 
 # Cython debug symbols
+*.pyd
+
+# Project-generated models and experiment outputs
+models/
+*.pt
+*.task
+outputs/
+
+# Local video data
+data/*.mp4
+
+# Windows metadata
+Thumbs.db
 cython_debug/
 
 # PyCharm
