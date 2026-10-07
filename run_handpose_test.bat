@@ -30,11 +30,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if not exist "data\Disassembly1.mp4" (
-    echo ERROR: Video ontbreekt: data\Disassembly1.mp4
-    exit /b 1
-)
-
 echo [3/3] MediaPipe handpose-test uitvoeren...
 "%PYTHON%" -u src\run_handpose.py --config configs\baseline.yaml %*
 set "EXIT_CODE=%ERRORLEVEL%"

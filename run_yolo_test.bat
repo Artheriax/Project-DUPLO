@@ -47,11 +47,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if not exist "data\Disassembly1.mp4" (
-    echo ERROR: Video ontbreekt: data\Disassembly1.mp4
-    exit /b 1
-)
-
 echo [4/4] YOLO-test uitvoeren...
 "%PYTHON%" -u src\run_yolo_video.py --config configs\baseline.yaml %*
 set "EXIT_CODE=%ERRORLEVEL%"
