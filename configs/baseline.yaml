@@ -1,7 +1,7 @@
 video_path: "data/Disassembly1.mp4"   # relatief pad
 output_dir: "outputs/Disassembly1"        # relatief pad
-yolo_model: "models/yolo11x.pt"          # pretrained COCO; wordt gedownload als het ontbreekt
-conf_threshold: 0.25
+yolo_model: "models/yolo26x.pt"          # pretrained COCO; wordt gedownload als het ontbreekt
+conf_threshold: 0.50
 max_hands: 2
 device: "gpu"                            # "cpu" of "gpu"; --device overschrijft dit
 frame_stride: 2                          # 1 = elk frame
