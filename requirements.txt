@@ -5,4 +5,5 @@ pandas
 pyyaml
 tqdm
 deep-sort-realtime
+imageio-ffmpeg
 # Voor GPU: de scripts installeren de CUDA-build van torch automatisch bij --device gpu

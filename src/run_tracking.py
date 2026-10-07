@@ -10,6 +10,7 @@ from duplo.gpu import ensure_cuda_torch
 from duplo.output import prepare_output_dir, write_rows_csv
 from duplo.tracking import ObjectTracker, TrackObservation
 from duplo.video import VideoFrames, video_fps
+from duplo.video_writer import DebugVideoWriter
 
 
 def track_color(track_id: int) -> tuple[int, int, int]:
@@ -102,19 +103,12 @@ def main(cfg_path: str, device: str | None = None) -> None:
         if save_video:
             if writer is None:
                 height, width = frame.shape[:2]
-                writer = cv2.VideoWriter(
-                    str(out_dir / "tracking_debug.mp4"),
-                    cv2.VideoWriter_fourcc(*"mp4v"), fps / stride, (width, height))
-                if not writer.isOpened():
-                    print("Waarschuwing: de debug-video kan niet worden "
-                          "weggeschreven; gaat verder zonder video.")
-                    writer.release()
-                    writer = None
-                    save_video = False
-            if writer is not None:
-                draw_tracks(frame, observations, tracker.trajectories,
-                            detector.class_names)
-                writer.write(frame)
+                writer = DebugVideoWriter(
+                    out_dir / "tracking_debug.mp4", fps / stride,
+                    (width, height))
+            draw_tracks(frame, observations, tracker.trajectories,
+                        detector.class_names)
+            writer.write(frame)
     if writer is not None:
         writer.release()
 
