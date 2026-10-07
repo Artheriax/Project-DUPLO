@@ -1,10 +1,21 @@
 # Project DUPLO
 
+## Projectstructuur
+
+- `configs/` – instellingen per experiment (video, model, drempels, device)
+- `data/` – invoervideo's (niet in git)
+- `models/` – gedownloade modelgewichten: `yolo11x.pt` en `hand_landmarker.task` (niet in git)
+- `outputs/` – resultaten per video: CSV met detections/landmarks en voorbeeldframes
+- `src/duplo/` – gedeelde componenten: CLI, config, GPU-setup, video-inlezen, output
+- `src/run_yolo_video.py` – YOLO-pipeline (objectdetectie)
+- `src/run_handpose.py` – MediaPipe-pipeline (handlandmarks)
+- `run_yolo_test.bat` / `run_handpose_test.bat` – startscripts voor Windows
+
 ## Eerste YOLO-test
 
 Dubbelklik op `run_yolo_test.bat` vanuit de projectmap. Het script maakt `.venv` aan als die nog niet bestaat, installeert of controleert de packages uit `requirements.txt`, controleert de imports en voert daarna de YOLO-test uit op `data/Disassembly1.mp4`.
 
-De eerste run downloadt automatisch het pretrained model `yolo11x.pt` als dat nog ontbreekt. De resultaten komen in `outputs/Disassembly1/`, met detections in `yolo_detections.csv` en voorbeeldframes als JPG-bestanden.
+De eerste run downloadt automatisch het pretrained model `models/yolo11x.pt` als dat nog ontbreekt. De resultaten komen in `outputs/Disassembly1/`, met detections in `yolo_detections.csv` en voorbeeldframes als JPG-bestanden.
 
 ## Eerste MediaPipe-test
 
