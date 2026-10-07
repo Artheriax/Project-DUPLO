@@ -1,4 +1,5 @@
 """Video-inlezen met frame-stride en voortgangsbalk."""
+import time
 from collections.abc import Iterator
 
 import cv2
@@ -14,7 +15,11 @@ def video_fps(video_path: str) -> float:
 
 
 class VideoFrames:
-    """Itereert videoframes volgens een vaste stride, met voortgangsbalk.
+    """Itereert videoframes volgens een vaste stride, met voortgangsweergave.
+
+    In een terminal verschijnt een balk die op één regel bijwerkt; wordt de
+    uitvoer vastgelegd (logbestand, IDE-paneel), dan verschijnen regels bij
+    elke 10% of elke 5 seconden, direct geflusht.
 
     Yields (frame_idx, frame) voor elk frame waarop frame_idx % stride == 0;
     na de iteratie bevat frames_read het aantal ingelezen frames.
@@ -30,7 +35,9 @@ class VideoFrames:
         video = cv2.VideoCapture(self.video_path)
         total = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
         progress = tqdm(total=total if total > 0 else None, desc=self.desc,
-                        unit="frame")
+                        unit="frame", disable=None)
+        report_step = max(1, total // 10) if total > 0 else 0
+        last_report = time.monotonic()
         try:
             frame_idx = 0
             while True:
@@ -39,6 +46,14 @@ class VideoFrames:
                     break
                 self.frames_read = frame_idx + 1
                 progress.update(1)
+                if progress.disable and report_step:
+                    now = time.monotonic()
+                    if (self.frames_read % report_step == 0
+                            or now - last_report >= 5.0):
+                        last_report = now
+                        percent = self.frames_read * 100 // total
+                        print(f"{self.desc}: {percent}% "
+                              f"({self.frames_read}/{total} frames)", flush=True)
                 if frame_idx % self.stride == 0:
                     yield frame_idx, frame
                 frame_idx += 1

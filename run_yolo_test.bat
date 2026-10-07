@@ -53,7 +53,7 @@ if not exist "data\Disassembly1.mp4" (
 )
 
 echo [4/4] YOLO-test uitvoeren...
-"%PYTHON%" src\run_yolo_video.py --config configs\baseline.yaml %*
+"%PYTHON%" -u src\run_yolo_video.py --config configs\baseline.yaml %*
 set "EXIT_CODE=%ERRORLEVEL%"
 
 if "%EXIT_CODE%"=="0" (
