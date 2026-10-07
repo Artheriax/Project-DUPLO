@@ -78,7 +78,7 @@ def build_row(video_path: str, frame_number: int, fps: float,
 
 def main(cfg_path: str, device: str | None = None) -> None:
     cfg = load_config(cfg_path)
-    out_dir = prepare_output_dir(cfg)
+    out_dir = prepare_output_dir(cfg, "tracking")
 
     device = resolve_device(device, cfg)
     if device == "gpu":

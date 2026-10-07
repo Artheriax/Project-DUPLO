@@ -60,7 +60,7 @@ def create_landmarker(cfg: dict, model_path: Path, delegate) -> vision.HandLandm
 
 def main(cfg_path: str, device: str | None = None) -> None:
     cfg = load_config(cfg_path)
-    out_dir = prepare_output_dir(cfg)
+    out_dir = prepare_output_dir(cfg, "handpose")
 
     device = resolve_device(device, cfg)
     model_path = get_model_path(cfg)

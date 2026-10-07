@@ -8,7 +8,7 @@ from duplo.video import VideoFrames
 
 def main(cfg_path: str, device: str | None = None) -> None:
     cfg = load_config(cfg_path)
-    out_dir = prepare_output_dir(cfg)
+    out_dir = prepare_output_dir(cfg, "yolo")
 
     device = resolve_device(device, cfg)
     if device == "gpu":

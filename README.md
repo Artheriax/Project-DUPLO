@@ -5,7 +5,7 @@
 - `configs/` – instellingen per experiment (video, model, drempels, device)
 - `data/` – invoervideo's (niet in git)
 - `models/` – gedownloade modelgewichten: `yolo11x.pt` en `hand_landmarker.task` (niet in git)
-- `outputs/` – resultaten per video: CSV met detections/landmarks en voorbeeldframes
+- `outputs/` – resultaten per video, per stap een eigen submap (`yolo/`, `handpose/`, `tracking/`) met CSV's, voorbeeldframes en debug-video
 - `src/duplo/` – gedeelde componenten: CLI, config, GPU-setup, video-inlezen, output, detectie en DeepSORT-tracking
 - `src/run_yolo_video.py` – YOLO-pipeline (objectdetectie)
 - `src/run_handpose.py` – MediaPipe-pipeline (handlandmarks)
@@ -16,15 +16,15 @@
 
 Dubbelklik op `run_yolo_test.bat` vanuit de projectmap. Het script maakt `.venv` aan als die nog niet bestaat, installeert of controleert de packages uit `requirements.txt`, controleert de imports en voert daarna de YOLO-test uit op `data/Disassembly1.mp4`.
 
-De eerste run downloadt automatisch het pretrained model `models/yolo11x.pt` als dat nog ontbreekt. De resultaten komen in `outputs/Disassembly1/`, met detections in `yolo_detections.csv` en voorbeeldframes als JPG-bestanden.
+De eerste run downloadt automatisch het pretrained model `models/yolo11x.pt` als dat nog ontbreekt. De resultaten komen in `outputs/Disassembly1/yolo/`, met detections in `yolo_detections.csv` en voorbeeldframes als JPG-bestanden.
 
 ## Eerste MediaPipe-test
 
-Dubbelklik op `run_handpose_test.bat` om MediaPipe handpose op dezelfde video uit te voeren. De handlandmarks komen in `outputs/Disassembly1/hand_landmarks.csv` en geannoteerde voorbeeldframes worden als JPG-bestanden opgeslagen.
+Dubbelklik op `run_handpose_test.bat` om MediaPipe handpose op dezelfde video uit te voeren. De handlandmarks komen in `outputs/Disassembly1/handpose/hand_landmarks.csv` en geannoteerde voorbeeldframes worden als JPG-bestanden opgeslagen.
 
 ## DeepSORT-tracking
 
-Dubbelklik op `run_tracking_test.bat` om YOLO + DeepSORT op dezelfde video uit te voeren. Elke YOLO-detectie krijgt een unieke track-ID die tussen frames stabiel blijft, ook wanneer een object korte tijd aan het zicht onttrokken is (occlusie). De resultaten komen in `outputs/Disassembly1/`:
+Dubbelklik op `run_tracking_test.bat` om YOLO + DeepSORT op dezelfde video uit te voeren. Elke YOLO-detectie krijgt een unieke track-ID die tussen frames stabiel blijft, ook wanneer een object korte tijd aan het zicht onttrokken is (occlusie). De resultaten komen in `outputs/Disassembly1/tracking/`:
 
 - `tracking_history.csv` – per frame één rij per track met `track_id`, `class_id`, `class_name`, `confidence`, `bbox_x1`..`bbox_y2`, `center_x`/`center_y` (bbox en center in pixels), `velocity_x`/`velocity_y` (verplaatsing in pixels per videoframe), `track_age` (frames sinds het ontstaan van de track), `frames_since_detection` en `status`. Rijen met status `occluded` hebben geen bbox of confidence: het object was tijdelijk niet zichtbaar, maar de track blijft bestaan om de occlusie te overbruggen.
 - `tracking_debug.mp4` – debug-video met YOLO-bboxes, klassennamen, confidence, track-ID's en trajectories. Occluded tracks worden grijs weergegeven op hun voorspelde positie.
