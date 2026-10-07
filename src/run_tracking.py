@@ -1,4 +1,4 @@
-"""YOLO + DeepSORT op een video; logt de trackgeschiedenis en schrijft een
+"""YOLO + ByteTrack op een video; logt de trackgeschiedenis en schrijft een
 debug-video met bboxes, track-ID's en trajectories."""
 import cv2
 import numpy as np
@@ -85,8 +85,8 @@ def main(cfg_path: str, device: str | None = None) -> None:
     if device == "gpu":
         ensure_cuda_torch()
     detector = YoloDetector(cfg, device)
-    tracker = ObjectTracker(cfg, device)
-    print(f"YOLO + DeepSORT draaien op {device.upper()}")
+    tracker = ObjectTracker(cfg)
+    print(f"YOLO + ByteTrack draaien op {device.upper()}")
 
     fps = video_fps(cfg["video_path"])
     stride = cfg.get("frame_stride", 1)
@@ -94,9 +94,13 @@ def main(cfg_path: str, device: str | None = None) -> None:
 
     rows = []
     writer = None
-    frames = VideoFrames(cfg["video_path"], stride=stride, desc="DeepSORT")
+    frames = VideoFrames(cfg["video_path"], stride=stride, desc="ByteTrack")
     for frame_number, frame in frames:
-        observations = tracker.update(frame_number, frame, detector.detect(frame))
+        # Detecties met een lage score gaan mee: ByteTrack gebruikt die in de
+        # tweede associatiestap om occlusies te overbruggen.
+        detections = detector.detect(frame,
+                                     conf=cfg.get("track_low_thresh", 0.1))
+        observations = tracker.update(frame_number, frame, detections)
         rows.extend(build_row(cfg["video_path"], frame_number, fps,
                               observation, detector.class_names)
                     for observation in observations)

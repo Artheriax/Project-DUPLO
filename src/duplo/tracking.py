@@ -1,14 +1,13 @@
-"""DeepSORT multi-object tracking: stabiele track-ID's en objectgeschiedenis.
+"""ByteTrack multi-object tracking: stabiele track-ID's en objectgeschiedenis.
 
-DeepSORT koppelt de YOLO-detecties tussen frames aan elkaar op basis van
-beweging (Kalman-filter) en appearance (embedding van de crop), geeft elk
-object een uniek track_id en overbrugt korte occlusies.
+ByteTrack koppelt de YOLO-detecties tussen frames aan elkaar met een
+Kalman-filter en IoU-associatie, geeft elk object een uniek track_id en
+overbrugt korte occlusies door detecties met een lage confidence in een tweede
+associatiestap te gebruiken. Hiervoor wordt de BYTETracker uit ultralytics
+gebruikt (versie staat vast in requirements.txt); de tracker draait op de CPU.
 """
-import importlib.resources
-import sys
 import types
 from collections import deque
-from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -17,7 +16,7 @@ import numpy as np
 from duplo.detection import Detection
 
 if TYPE_CHECKING:
-    from deep_sort_realtime.deep_sort.track import Track
+    from ultralytics.trackers.byte_tracker import STrack
 
 
 @dataclass(frozen=True)
@@ -42,75 +41,99 @@ class TrackObservation:
     status: str
 
 
-@contextmanager
-def _pkg_resources_fallback():
-    """pkg_resources-shim voor deep_sort_realtime.
+class _DetectionView:
+    """Results-achtige view over Detection-objecten voor de ultralytics BYTETracker.
 
-    deep_sort_realtime importeert pkg_resources, dat sinds setuptools 84 niet
-    meer wordt meegeleverd. De shim voorziet alleen resource_filename (voor het
-    vinden van de embedder-weights) en wordt daarna weer verwijderd.
+    De BYTETracker verwacht een object met `conf`, `cls` en `xywh` (pixels) dat
+    boolean-indexering ondersteunt; deze klasse biedt dat op basis van onze
+    eigen Detection-objecten.
     """
-    try:
-        import pkg_resources  # noqa: F401
-    except ModuleNotFoundError:
-        shim = types.ModuleType("pkg_resources")
-        shim.resource_filename = lambda package, resource: str(
-            importlib.resources.files(package).joinpath(resource))
-        sys.modules["pkg_resources"] = shim
-        try:
-            yield
-        finally:
-            del sys.modules["pkg_resources"]
-    else:
-        yield
+
+    def __init__(self, conf: np.ndarray, cls: np.ndarray,
+                 xywh: np.ndarray) -> None:
+        self.conf = conf
+        self.cls = cls
+        self.xywh = xywh
+
+    @classmethod
+    def from_detections(cls, detections: list[Detection]) -> "_DetectionView":
+        boxes = np.array([detection.bbox for detection in detections],
+                         dtype=np.float32).reshape(-1, 4)
+        xywh = np.empty((len(detections), 4), dtype=np.float32)
+        xywh[:, 0] = (boxes[:, 0] + boxes[:, 2]) / 2
+        xywh[:, 1] = (boxes[:, 1] + boxes[:, 3]) / 2
+        xywh[:, 2] = boxes[:, 2] - boxes[:, 0]
+        xywh[:, 3] = boxes[:, 3] - boxes[:, 1]
+        return cls(
+            conf=np.array([detection.confidence for detection in detections],
+                          dtype=np.float32),
+            cls=np.array([detection.class_id for detection in detections],
+                         dtype=np.float32),
+            xywh=xywh,
+        )
+
+    def __len__(self) -> int:
+        return len(self.conf)
+
+    def __getitem__(self, index) -> "_DetectionView":
+        return _DetectionView(self.conf[index], self.cls[index],
+                              self.xywh[index])
 
 
 class ObjectTracker:
-    """DeepSORT-wrapper die per track de beweging en geschiedenis bijhoudt."""
+    """ByteTrack-wrapper die per track de beweging en geschiedenis bijhoudt."""
 
-    def __init__(self, cfg: dict, device: str = "cpu") -> None:
-        with _pkg_resources_fallback():
-            from deep_sort_realtime.deepsort_tracker import DeepSort
+    def __init__(self, cfg: dict) -> None:
+        # Pas importeren na een eventuele CUDA-torch-installatie, anders draait
+        # een reeds geladen CPU-build.
+        from ultralytics.trackers.byte_tracker import BYTETracker
 
-            use_gpu = device == "gpu"
-            self._deepsort = DeepSort(
-                max_age=cfg.get("track_max_age", 30),
-                n_init=cfg.get("track_n_init", 3),
-                max_cosine_distance=cfg.get("track_max_cosine_distance", 0.2),
-                embedder="mobilenet",
-                embedder_gpu=use_gpu,
-                half=use_gpu,
-                bgr=True,
-            )
+        self._tracker = BYTETracker(types.SimpleNamespace(
+            track_high_thresh=cfg.get("track_high_thresh", 0.25),
+            track_low_thresh=cfg.get("track_low_thresh", 0.1),
+            new_track_thresh=cfg.get("new_track_thresh", 0.25),
+            track_buffer=cfg.get("track_buffer", 30),
+            match_thresh=cfg.get("match_thresh", 0.8),
+            fuse_score=cfg.get("fuse_score", True),
+        ))
         self.trajectory_length = cfg.get("track_trajectory_length", 60)
+        self._detections: list[Detection] = []
         self._last_seen: dict[int, tuple[int, float, float]] = {}
         self.trajectories: dict[int, deque[tuple[float, float]]] = {}
 
     def update(self, frame_number: int, frame: np.ndarray,
                detections: list[Detection]) -> list[TrackObservation]:
-        """Koppelt de detecties van dit frame aan de bestaande tracks."""
-        raw_detections = [
-            ([detection.bbox[0], detection.bbox[1],
-              detection.bbox[2] - detection.bbox[0],
-              detection.bbox[3] - detection.bbox[1]],
-             detection.confidence, detection.class_id)
-            for detection in detections
-        ]
-        tracks = self._deepsort.update_tracks(raw_detections, frame=frame)
-        return [self._observe(frame_number, track) for track in tracks]
+        """Koppelt de detecties van dit frame aan de bestaande tracks.
 
-    def _observe(self, frame_number: int, track: "Track") -> TrackObservation:
-        # track_id is een numerieke string zolang DeepSort geen 'today' krijgt.
-        track_id = int(track.track_id)
-        visible = track.time_since_update == 0
+        De frame-pixels zijn voor ByteTrack niet nodig (associatie gebeurt op
+        beweging en IoU); de parameter blijft zodat een tracker die de beelden
+        wel gebruikt, zoals BoT-SORT, later uitwisselbaar is.
+        """
+        self._detections = detections
+        self._tracker.update(_DetectionView.from_detections(detections))
+        # tracked_stracks bevat de actieve tracks (bevestigd en net gestart),
+        # lost_stracks de tracks binnen track_buffer die tijdelijk niet
+        # gedetecteerd zijn. Beide zijn gedocumenteerde BYTETracker-attributen.
+        observations = [self._observe(frame_number, track, visible=True)
+                        for track in self._tracker.tracked_stracks]
+        observations += [self._observe(frame_number, track, visible=False)
+                         for track in self._tracker.lost_stracks]
+        self._detections = []
+        return observations
+
+    def _observe(self, frame_number: int, track: "STrack",
+                 visible: bool) -> TrackObservation:
+        track_id = track.track_id
+        predicted_bbox = tuple(float(value) for value in track.xyxy)
         bbox = center = confidence = velocity = None
         if visible:
-            # De originele detectie in plaats van de Kalman-voorspelling.
-            x1, y1, x2, y2 = (float(value) for value in
-                              track.to_ltrb(orig=True, orig_strict=True))
-            bbox = (x1, y1, x2, y2)
+            detection = self._matched_detection(track)
+            # De originele detectie in plaats van de Kalman-schatting, zodat de
+            # bbox gelijk blijft aan wat YOLO in dit frame zag.
+            bbox = detection.bbox if detection is not None else predicted_bbox
+            x1, y1, x2, y2 = bbox
             center = ((x1 + x2) / 2, (y1 + y2) / 2)
-            confidence = float(track.det_conf)
+            confidence = float(track.score)
             previous = self._last_seen.get(track_id)
             if previous is not None:
                 elapsed = frame_number - previous[0]
@@ -122,19 +145,26 @@ class ObjectTracker:
                 track_id, deque(maxlen=self.trajectory_length)).append(center)
         if not visible:
             status = "occluded"
-        elif track.is_tentative():
-            status = "tentative"
-        else:
+        elif track.is_activated:
             status = "confirmed"
+        else:
+            status = "tentative"
         return TrackObservation(
             track_id=track_id,
-            class_id=track.det_class,
+            class_id=int(track.cls),
             confidence=confidence,
             bbox=bbox,
-            predicted_bbox=tuple(float(value) for value in track.to_ltrb()),
+            predicted_bbox=predicted_bbox,
             center=center,
             velocity=velocity,
-            track_age=track.age,
-            frames_since_detection=track.time_since_update,
+            track_age=self._tracker.frame_id - track.start_frame,
+            frames_since_detection=self._tracker.frame_id - track.frame_id,
             status=status,
         )
+
+    def _matched_detection(self, track: "STrack") -> Detection | None:
+        """De detectie uit dit frame die aan de track gekoppeld is (track.idx)."""
+        index = int(track.idx)
+        if 0 <= index < len(self._detections):
+            return self._detections[index]
+        return None

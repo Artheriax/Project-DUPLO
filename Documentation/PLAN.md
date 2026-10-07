@@ -36,7 +36,7 @@ Bounding boxes          21 landmarks/hand
   │                       │
   ▼                       │
 Object tracking           │
-(DeepSORT / alternatief)  │
+(ByteTrack)               │
   │                       │
   ▼                       ▼
 Object IDs + history + hand movement
@@ -89,7 +89,7 @@ Voorbeelden:
 * kabels;
 * specifieke productonderdelen.
 
-Wanneer een object niet door YOLO wordt gedetecteerd, kan DeepSORT dit object ook niet volgen.
+Wanneer een object niet door YOLO wordt gedetecteerd, kan ByteTrack dit object ook niet volgen.
 
 De baseline wordt daarom vooral gebruikt om de **gap tussen een generiek pretrained model en de DUPLO-specifieke toepassing** te bepalen.
 
@@ -99,14 +99,14 @@ De baseline wordt daarom vooral gebruikt om de **gap tussen een generiek pretrai
 
 Wanneer YOLO een object detecteert, worden de detecties doorgegeven aan een multi-object tracker.
 
-Als eerste kandidaat wordt **DeepSORT** onderzocht.
+Er wordt gebruikgemaakt van **ByteTrack**, de tracker die ook in de Ultralytics-tooling is opgenomen.
 
-DeepSORT moet:
+ByteTrack moet:
 
 * dezelfde objecten over meerdere frames koppelen;
 * een unieke track_id geven;
-* bewegingsinformatie gebruiken;
-* appearance information gebruiken;
+* bewegingsinformatie gebruiken (Kalman-filter);
+* detecties met een lage confidence in een tweede associatiestap gebruiken;
 * tijdelijke occlusion zo goed mogelijk kunnen overbruggen.
 
 Voorbeeld:
@@ -127,7 +127,7 @@ screw → track_id 17
 
 Hierdoor ontstaat een objectgeschiedenis in plaats van alleen losse frame-detecties.
 
-Omdat DUPLO-disassembly veel beweging en occlusion bevat, wordt DeepSORT niet automatisch als beste oplossing beschouwd. Indien nodig wordt het vergeleken met bijvoorbeeld **ByteTrack of BoT-SORT**.
+Omdat DUPLO-disassembly veel beweging en occlusion bevat, kan ByteTrack later worden vergeleken met alternatieven zoals **BoT-SORT**.
 
 ---
 
@@ -164,7 +164,7 @@ Hiermee kan later worden onderzocht of bewegingen van objecten kunnen helpen bij
 
 # 6. Fase 4 – Handdetectie en handtracking
 
-MediaPipe Hands wordt onafhankelijk van YOLO/DeepSORT gebruikt.
+MediaPipe Hands wordt onafhankelijk van YOLO/ByteTrack gebruikt.
 
 Per frame worden opgeslagen:
 
@@ -521,7 +521,7 @@ Het project blijft daarmee een proof of concept en hoeft niet alle bovenstaande 
 
 > WHAT is present?
 
-**DeepSORT / tracking**
+**ByteTrack / tracking**
 
 > WHICH detected object is the same object over time?
 

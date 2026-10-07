@@ -24,13 +24,13 @@ if errorlevel 1 (
 )
 
 echo [2/3] Imports verifieren...
-"%PYTHON%" -c "import cv2, deep_sort_realtime, pandas, yaml, tqdm, ultralytics; print('Alle DeepSORT imports zijn beschikbaar.')"
+"%PYTHON%" -c "import cv2, pandas, yaml, tqdm, ultralytics; print('Alle imports zijn beschikbaar.')"
 if errorlevel 1 (
     echo ERROR: De Python-omgeving is niet compleet.
     exit /b 1
 )
 
-echo [3/3] DeepSORT-tracking uitvoeren...
+echo [3/3] ByteTrack-tracking uitvoeren...
 "%PYTHON%" -u src\run_tracking.py --config configs\baseline.yaml %*
 set "EXIT_CODE=%ERRORLEVEL%"
 
@@ -39,7 +39,7 @@ if "%EXIT_CODE%"=="0" (
     echo Klaar. De trackgeschiedenis staat in outputs\Disassembly1
 ) else (
     echo.
-    echo ERROR: De DeepSORT-test is gestopt met code %EXIT_CODE%.
+    echo ERROR: De ByteTrack-test is gestopt met code %EXIT_CODE%.
 )
 
 popd

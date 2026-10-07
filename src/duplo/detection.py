@@ -31,9 +31,12 @@ class YoloDetector:
         self.model = YOLO(cfg["yolo_model"])
         self.class_names = dict(self.model.names)
 
-    def detect(self, frame: np.ndarray) -> list[Detection]:
+    def detect(self, frame: np.ndarray,
+               conf: float | None = None) -> list[Detection]:
+        """Detecteer objecten; conf overschrijft tijdelijk de config-drempel."""
         result = self.model.predict(
-            frame, conf=self.conf_threshold, device=self.device, verbose=False
+            frame, conf=self.conf_threshold if conf is None else conf,
+            device=self.device, verbose=False
         )[0]
         detections = []
         for box in result.boxes:
