@@ -1,50 +1,117 @@
-Het project:
-We bouwen een video-analyse pipeline voor DUPLO-disassembly.
+# Technisch plan – DUPLO Human Action Recognition
 
-DOEL:
-Detecteer objecten met YOLO26X, volg dezelfde objecten over meerdere frames met DeepSORT en detecteer handposities met MediaPipe Hands. De tracking- en handinformatie moet per frame worden opgeslagen zodat deze later gebruikt kan worden voor temporele actieherkenning.
+## 1. Doel van het project
 
-PIPELINE:
+We bouwen een modulaire video-analysepipeline voor DUPLO-disassembly waarmee we onderzoeken in hoeverre disassemblyprocessen automatisch uit video kunnen worden herkend en gestructureerd.
 
+De pipeline moet uiteindelijk informatie kunnen verzamelen over:
+
+* welke objecten/componenten aanwezig zijn;
+* welke gereedschappen worden gebruikt;
+* welke objecten door de tijd gevolgd worden;
+* waar en hoe de handen bewegen;
+* welke handelingen plaatsvinden;
+* wanneer een handeling begint en eindigt.
+
+Deze informatie moet later bruikbaar zijn voor onder andere **eDIM/reDIM, Disassembly Graphs, tool taxonomy en toekomstige work instructions**.
+
+Het project is een proof of concept. Het doel is daarom niet om direct een volledig productierijp systeem te bouwen, maar om experimenteel vast te stellen wat technisch haalbaar is en waar de beperkingen liggen.
+
+---
+
+# 2. Overall workflow
+
+```text
 Video
-→ frame extraction
-→ YOLO26X object detection
-→ YOLO bounding boxes/classes/confidence
-→ DeepSORT multi-object tracking
-→ unieke track IDs + object history
-→ MediaPipe Hands
-→ 21 hand landmarks per hand
-→ gecombineerde temporele dataset
-→ later action recognition
+  │
+  ▼
+Frame extraction
+  │
+  ├───────────────────────┐
+  ▼                       ▼
+YOLO object detection   MediaPipe Hands
+  │                       │
+  ▼                       ▼
+Bounding boxes          21 landmarks/hand
+  │                       │
+  ▼                       │
+Object tracking           │
+(DeepSORT / alternatief)  │
+  │                       │
+  ▼                       ▼
+Object IDs + history + hand movement
+             │
+             ▼
+      Gecombineerde
+      temporele data
+             │
+             ▼
+      Action recognition
+             │
+             ▼
+  Disassembly action labels
+             │
+             ▼
+ eDIM / Disassembly Graph /
+ Tool taxonomy / work instructions
+```
 
-STAP 1 — VIDEO:
-Lees een video frame voor frame en behoud het oorspronkelijke frame number en timestamp.
+De pipeline wordt in fases opgebouwd. Eerst wordt onderzocht wat met bestaande pretrained modellen mogelijk is. Daarna wordt de dataset uitgebreid en worden relevante modellen gefinetuned.
 
-STAP 2 — YOLO26X:
-Voer YOLO26X objectdetectie uit op ieder frame.
+---
 
-Per detectie moeten minimaal worden opgeslagen:
+# 3. Fase 1 – Technische baseline
 
-- frame_number
-- timestamp
-- class_id
-- class_name
-- confidence
-- bounding_box: x1, y1, x2, y2
-Gebruik voorlopig het pretrained model. Er is nog geen fine-tuning.
+## 3.1 YOLO objectdetectie
 
-STAP 3 — DEEPSORT:
-Geef de YOLO-detecties door aan DeepSORT.
+Gebruik YOLO26X met pretrained weights als eerste baseline.
+
+Per frame worden minimaal opgeslagen:
+
+* frame_number
+* timestamp
+* class_id
+* class_name
+* confidence
+* bounding box: x1, y1, x2, y2
+
+De pretrained versie wordt gebruikt om te onderzoeken welke informatie al zonder training uit de beschikbare video's kan worden gehaald.
+
+### Belangrijke beperking
+
+Het pretrained model is getraind op algemene objectklassen en bevat niet noodzakelijk de objecten die voor DUPLO relevant zijn.
+
+Voorbeelden:
+
+* schroeven;
+* specifieke schroevendraaiers;
+* connectoren;
+* kabels;
+* specifieke productonderdelen.
+
+Wanneer een object niet door YOLO wordt gedetecteerd, kan DeepSORT dit object ook niet volgen.
+
+De baseline wordt daarom vooral gebruikt om de **gap tussen een generiek pretrained model en de DUPLO-specifieke toepassing** te bepalen.
+
+---
+
+# 4. Fase 2 – Object tracking
+
+Wanneer YOLO een object detecteert, worden de detecties doorgegeven aan een multi-object tracker.
+
+Als eerste kandidaat wordt **DeepSORT** onderzocht.
 
 DeepSORT moet:
 
-- bestaande objecten tussen frames aan elkaar koppelen;
-- een unieke track_id geven;
-- rekening houden met beweging;
-- appearance information gebruiken voor associatie;
-- tijdelijke occlusion zo goed mogelijk kunnen overbruggen.
+* dezelfde objecten over meerdere frames koppelen;
+* een unieke track_id geven;
+* bewegingsinformatie gebruiken;
+* appearance information gebruiken;
+* tijdelijke occlusion zo goed mogelijk kunnen overbruggen.
+
 Voorbeeld:
 
+```text
 Frame 100:
 screw → track_id 17
 
@@ -56,93 +123,422 @@ screw → track_id 17
 
 Frame 103:
 screw → track_id 17
+```
 
-De track_id moet dus stabiel blijven zolang de tracker kan bepalen dat het om hetzelfde object gaat.
+Hierdoor ontstaat een objectgeschiedenis in plaats van alleen losse frame-detecties.
 
-STAP 4 — OBJECT HISTORY:
-Bewaar per track_id een tijdreeks.
+Omdat DUPLO-disassembly veel beweging en occlusion bevat, wordt DeepSORT niet automatisch als beste oplossing beschouwd. Indien nodig wordt het vergeleken met bijvoorbeeld **ByteTrack of BoT-SORT**.
+
+---
+
+# 5. Fase 3 – Object history
+
+Per track_id wordt een tijdreeks opgeslagen.
 
 Bijvoorbeeld:
 
+```text
 track_id: 17
 class: screw
 
 frame 100 → bbox + center + confidence
 frame 101 → bbox + center + confidence
 frame 102 → bbox + center + confidence
+frame 103 → bbox + center + confidence
+```
 
-Bereken indien mogelijk ook:
+Waar mogelijk worden aanvullende eigenschappen berekend:
 
-- center_x
-- center_y
-- velocity / displacement tussen frames
-- track age
-- aantal frames sinds laatste detectie
-- zichtbaarheid/status
-STAP 5 — MEDIAPIPE HANDS:
-Gebruik MediaPipe Hands onafhankelijk van DeepSORT om beide handen te detecteren.
+* center_x
+* center_y
+* displacement
+* velocity
+* track age
+* frames sinds laatste detectie
+* visibility/status
+* trajectory
 
-Bewaar per frame:
+Hiermee kan later worden onderzocht of bewegingen van objecten kunnen helpen bij het herkennen van disassembly actions.
 
-- left/right hand
-- 21 landmarks
-- landmark x/y/z
-- hand confidence indien beschikbaar
-De handdata moet dezelfde frame_number/timestamp gebruiken als de YOLO/DeepSORT-data zodat alles later gecombineerd kan worden.
+---
 
-STAP 6 — OUTPUT:
-Maak een gestructureerde output waarin object tracking en hand landmarks aan dezelfde frames gekoppeld kunnen worden.
+# 6. Fase 4 – Handdetectie en handtracking
+
+MediaPipe Hands wordt onafhankelijk van YOLO/DeepSORT gebruikt.
+
+Per frame worden opgeslagen:
+
+* left/right hand;
+* 21 landmarks;
+* landmark x/y/z;
+* hand confidence indien beschikbaar.
+
+De handdata krijgt dezelfde:
+
+* frame_number;
+* timestamp;
+
+als de objectdetecties en trackingdata.
+
+Hierdoor kunnen bijvoorbeeld de volgende gebeurtenissen later worden geanalyseerd:
+
+```text
+hand approaches object
+        ↓
+hand touches object
+        ↓
+object starts moving
+        ↓
+object moves away
+```
+
+MediaPipe levert hiermee belangrijke informatie voor actieherkenning zonder dat hiervoor direct een zwaar pose-estimationmodel nodig is.
+
+---
+
+# 7. Fase 5 – Definitie van acties en labels
+
+Voordat een action-recognitionmodel wordt getraind, wordt een beperkte actietaxonomie opgesteld.
+
+De voorgestelde startcategorieën zijn gebaseerd op de opdracht:
+
+| Actie                      | Mogelijke eDIM-koppeling     |
+| -------------------------- | ---------------------------- |
+| Unscrewing                 | Manipulation / Disconnection |
+| Tool change                | Tool change                  |
+| Pick up                    | Manipulation                 |
+| Remove component           | Removing                     |
+| Disconnect cable/connector | Disconnection                |
+| Position product           | Positioning                  |
+
+De uiteindelijke labels worden afgestemd met de opdrachtgever.
+
+Daarnaast wordt onderzocht welke informatie nodig is om een actie volledig te beschrijven.
 
 Bijvoorbeeld:
 
-frame_number
+```text
+REMOVE
+component = battery
+tool = screwdriver
+start = 12.4s
+end = 16.8s
+```
+
+Hierdoor wordt niet alleen "remove" herkend, maar ontstaat informatie die later daadwerkelijk naar DUPLO-structuren kan worden vertaald.
+
+---
+
+# 8. Fase 6 – Dataset en annotatie
+
+De beschikbare DUPLO-video's worden gebruikt om een kleine gelabelde dataset op te bouwen.
+
+De dataset bestaat uit meerdere informatielagen:
+
+### Objectannotaties
+
+Bounding boxes voor relevante:
+
+* componenten;
+* gereedschappen;
+* connectoren;
+* andere objecten die relevant zijn voor de acties.
+
+### Actieannotaties
+
+Acties krijgen:
+
+* action label;
+* start frame/timestamp;
+* eind frame/timestamp.
+
+### Eventueel
+
+Relaties tussen:
+
+* hand;
+* object;
+* gereedschap;
+* actie.
+
+Bijvoorbeeld:
+
+```text
+hand → screwdriver → screw
+```
+
+Dit maakt het mogelijk om later complexere acties te herkennen.
+
+---
+
+# 9. Fase 7 – YOLO fine-tuning
+
+Zodra voldoende relevante frames zijn geannoteerd, wordt YOLO gefinetuned op de eigen DUPLO-objectklassen.
+
+De pretrained COCO-klassen worden niet één-op-één overgenomen. De nieuwe dataset bepaalt welke klassen het uiteindelijke model moet herkennen.
+
+Bijvoorbeeld:
+
+```text
+0 = screwdriver
+1 = screw
+2 = connector
+3 = cable
+4 = component_A
+5 = component_B
+```
+
+Objecten die niet relevant zijn voor de toepassing hoeven niet als klasse in het uiteindelijke model te worden opgenomen.
+
+Dit kan bijvoorbeeld voorkomen dat een hand als `person` wordt gedetecteerd, omdat `person` geen relevante klasse hoeft te zijn wanneer MediaPipe Hands specifiek voor handinformatie wordt gebruikt.
+
+De pretrained YOLO-weights worden gebruikt als startpunt voor transfer learning.
+
+---
+
+# 10. Fase 8 – Action recognition
+
+Pas nadat voldoende temporele data en actielabels beschikbaar zijn, wordt onderzocht welke methode geschikt is voor daadwerkelijke actieherkenning.
+
+Mogelijke kandidaten zijn:
+
+* ST-GCN op MediaPipe keypoints;
+* temporal action detection;
+* video classification;
+* een eigen lichtgewicht temporal model;
+* een combinatie van object trajectories en hand landmarks.
+
+De keuze wordt gebaseerd op:
+
+* hoeveelheid beschikbare data;
+* benodigde nauwkeurigheid;
+* computationele eisen;
+* interpreteerbaarheid;
+* benodigde temporele informatie.
+
+Het action-recognitionmodel hoeft dus niet noodzakelijk end-to-end op de volledige video te werken.
+
+Een mogelijke input is bijvoorbeeld:
+
+```text
+Hand landmarks
+       +
+Object track history
+       +
+Object classes
+       +
+Tool information
+       ↓
+Temporal model
+       ↓
+"Remove component"
+```
+
+---
+
+# 11. Fase 9 – Output
+
+De pipeline moet uiteindelijk een machine-readable dataset kunnen produceren.
+
+Bijvoorbeeld:
+
+```text
 timestamp
+frame_number
 track_id
-class_name
+object_class
 confidence
-bbox_x1
-bbox_y1
-bbox_x2
-bbox_y2
-center_x
-center_y
-...
+bbox
+center
+velocity
+hand_landmarks
+action
+action_start
+action_end
+```
 
-en daarnaast de MediaPipe landmarks.
+Hiermee kan een gedetecteerde gebeurtenis bijvoorbeeld worden weergegeven als:
 
-Sla de tracking history bij voorkeur op in een machine-readable formaat zoals JSON/JSONL of CSV, zodat deze later opnieuw gebruikt kan worden zonder de video opnieuw te verwerken.
+```text
+12.4s – 16.8s
 
-STAP 7 — VISUALISATIE:
-Maak een optionele debug-outputvideo waarin zichtbaar is:
+ACTION:
+Remove component
 
-- YOLO bounding boxes
-- class names
-- confidence
-- DeepSORT track IDs
-- MediaPipe hand landmarks
-- eventueel trajectory/history van tracked objects
-Dit is belangrijk om visueel te controleren of tracking correct werkt.
+OBJECT:
+Battery
 
-BELANGRIJK:
-De eerste implementatie moet nog GEEN action-recognition model trainen.
+TOOL:
+Screwdriver
 
-Het doel van deze fase is alleen:
+HAND:
+Right hand
 
-1. Objecten detecteren.
-2. Objecten door de tijd volgen.
-3. Stabiele object IDs verkrijgen.
-4. Object movement/history verzamelen.
-5. Hand landmarks verzamelen.
-6. Alles synchroniseren per frame.
-7. De resultaten visueel kunnen controleren.
-Daarna kunnen we deze temporele informatie gebruiken voor een latere action-recognition/temporal-action-detection fase.
+CONFIDENCE:
+0.91
+```
 
-ARCHITECTUUR:
+Deze informatie kan later worden vertaald naar DUPLO-outputs.
 
-YOLO26X = WHAT is present?
-DeepSORT = WHICH object is the same object over time?
-MediaPipe Hands = WHERE are the hands and how do they move?
-Tracking history = HOW do objects move over time?
-Action recognition (later) = WHAT ACTION happened?
+---
 
-Ontwerp de code modulair zodat YOLO, DeepSORT en MediaPipe afzonderlijk vervangen of getest kunnen worden.
+# 12. Relatie met DUPLO
+
+De uiteindelijke pipeline moet niet alleen een computer vision-demo opleveren, maar informatie produceren die aansluit op de bestaande DUPLO-structuur.
+
+### Disassembly Graph
+
+Gedetecteerde:
+
+* componenten;
+* acties;
+* tools;
+* volgorde;
+
+kunnen later worden vertaald naar relaties en processtappen.
+
+### eDIM / reDIM
+
+Acties en eventueel hun duur kunnen worden gebruikt als input voor:
+
+* identifying;
+* manipulation;
+* positioning;
+* disconnection;
+* removing;
+* tool change.
+
+### Tool taxonomy
+
+Gedetecteerde gereedschappen en tool changes kunnen worden gekoppeld aan de bestaande toolcategorieën.
+
+### Work instructions
+
+De gedetecteerde sequence:
+
+```text
+pick up screwdriver
+→ unscrew
+→ remove component
+→ disconnect cable
+→ position component
+```
+
+kan later dienen als basis voor automatisch of semi-automatisch gegenereerde werkinstructies.
+
+---
+
+# 13. Evaluatie
+
+De evaluatie wordt aangepast aan het type component.
+
+### Objectdetectie
+
+* Precision
+* Recall
+* F1-score
+* mAP
+
+### Tracking
+
+* ID consistency
+* ID switches
+* tracking accuracy
+* eventueel standaard MOT-metrics indien relevant
+
+### Action recognition
+
+Afhankelijk van de gekozen methode:
+
+* Precision
+* Recall
+* F1-score
+* confusion matrix
+* temporal localization/segmentation quality
+
+### Praktische evaluatie
+
+Daarnaast wordt gekeken naar:
+
+* processing time;
+* visuele kwaliteit van de tracking;
+* failure cases;
+* occlusion;
+* kleine objecten;
+* false positives;
+* false negatives.
+
+Wanneer de dataset te klein is voor betrouwbare statistische conclusies, wordt een kwalitatieve demonstratie gecombineerd met een kritische analyse van de beperkingen.
+
+---
+
+# 14. Belangrijke uitgangspunten
+
+De eerste versie hoeft niet direct het volledige systeem te bevatten.
+
+De ontwikkeling verloopt stapsgewijs:
+
+```text
+FASE 1
+Pretrained YOLO + MediaPipe
+        ↓
+Wat kunnen we zonder training?
+
+FASE 2
+Object tracking
+        ↓
+Kunnen we objecten door de tijd volgen?
+
+FASE 3
+Annotatie + dataset
+        ↓
+Welke objecten en acties zijn relevant?
+
+FASE 4
+YOLO fine-tuning
+        ↓
+Kunnen we DUPLO-specifieke objecten herkennen?
+
+FASE 5
+Temporal/action recognition
+        ↓
+Kunnen we disassembly actions herkennen?
+
+FASE 6
+DUPLO mapping
+        ↓
+Kunnen we de resultaten koppelen aan
+eDIM / Disassembly Graph / tool taxonomy?
+```
+
+Het project blijft daarmee een proof of concept en hoeft niet alle bovenstaande fases volledig uit te voeren wanneer de beschikbare data daarvoor onvoldoende is.
+
+---
+
+# 15. Kern van de architectuur
+
+**YOLO26X**
+
+> WHAT is present?
+
+**DeepSORT / tracking**
+
+> WHICH detected object is the same object over time?
+
+**MediaPipe Hands**
+
+> WHERE are the hands and how do they move?
+
+**Object history**
+
+> HOW do objects move over time?
+
+**Action recognition**
+
+> WHAT ACTION happened?
+
+**DUPLO mapping**
+
+> HOW does that action translate into eDIM, Disassembly Graphs and work instructions?
+
+De code wordt modulair ontworpen zodat YOLO, tracker, MediaPipe en het latere action-recognitionmodel afzonderlijk vervangen en geëvalueerd kunnen worden.
