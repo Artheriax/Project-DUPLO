@@ -6,3 +6,8 @@ max_hands: 2
 device: "gpu"                            # "cpu" of "gpu"; --device overschrijft dit
 frame_stride: 2                          # 1 = elk frame
 screenshot_every: 150                    # elke ~5 s bij 30 fps
+track_max_age: 30                        # frames dat een track zonder detectie blijft bestaan (occlusie)
+track_n_init: 3                          # opeenvolgende detecties voordat een track bevestigd is
+track_max_cosine_distance: 0.2           # maximale appearance-afstand (cosine) voor associatie
+track_trajectory_length: 60              # lengte van de getekende trajectory in de debug-video
+save_tracking_video: true                # debug-video met bboxes, track-ID's en trajectories
