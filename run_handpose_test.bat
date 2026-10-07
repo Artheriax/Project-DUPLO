@@ -24,7 +24,7 @@ if errorlevel 1 (
 )
 
 echo [2/3] Imports verifieren...
-"%PYTHON%" -c "import cv2, mediapipe, pandas, yaml; print('Alle MediaPipe imports zijn beschikbaar.')"
+"%PYTHON%" -c "import cv2, mediapipe, pandas, yaml, tqdm; print('Alle MediaPipe imports zijn beschikbaar.')"
 if errorlevel 1 (
     echo ERROR: De Python-omgeving is niet compleet.
     exit /b 1
@@ -36,7 +36,7 @@ if not exist "data\Disassembly1.mp4" (
 )
 
 echo [3/3] MediaPipe handpose-test uitvoeren...
-"%PYTHON%" src\run_handpose.py --config configs\baseline.yaml
+"%PYTHON%" src\run_handpose.py --config configs\baseline.yaml %*
 set "EXIT_CODE=%ERRORLEVEL%"
 
 if "%EXIT_CODE%"=="0" (

@@ -1,5 +1,7 @@
-ultralytics>=8.2
-mediapipe==0.10.35
-opencv-python>=4.9
-pandas>=2.0
-pyyaml>=6.0
+ultralytics
+mediapipe
+opencv-python
+pandas
+pyyaml
+tqdm
+# Voor GPU: de scripts installeren de CUDA-build van torch automatisch bij --device gpu

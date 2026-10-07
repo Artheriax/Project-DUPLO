@@ -3,5 +3,6 @@ output_dir: "outputs/Disassembly1"        # relatief pad
 yolo_model: "yolo11x.pt"                 # pretrained COCO
 conf_threshold: 0.25
 max_hands: 2
+device: "cpu"                            # "cpu" of "gpu"; --device overschrijft dit
 frame_stride: 2                          # 1 = elk frame
 screenshot_every: 150                    # elke ~5 s bij 30 fps

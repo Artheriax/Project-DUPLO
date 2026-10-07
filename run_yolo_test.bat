@@ -34,14 +34,14 @@ if errorlevel 1 (
     echo ERROR: pip kon niet worden bijgewerkt.
     exit /b 1
 )
-"%PYTHON%" -m pip install -r requirements.txt
+"%PYTHON%" -m pip install -U -r requirements.txt
 if errorlevel 1 (
     echo ERROR: Een of meer packages konden niet worden geinstalleerd.
     exit /b 1
 )
 
 echo [3/4] Imports verifieren...
-"%PYTHON%" -c "import cv2, pandas, yaml, ultralytics; print('Alle vereiste imports zijn beschikbaar.')"
+"%PYTHON%" -c "import cv2, pandas, yaml, tqdm, ultralytics; print('Alle vereiste imports zijn beschikbaar.')"
 if errorlevel 1 (
     echo ERROR: De Python-omgeving is niet compleet.
     exit /b 1
@@ -53,7 +53,7 @@ if not exist "data\Disassembly1.mp4" (
 )
 
 echo [4/4] YOLO-test uitvoeren...
-"%PYTHON%" src\run_yolo_video.py --config configs\baseline.yaml
+"%PYTHON%" src\run_yolo_video.py --config configs\baseline.yaml %*
 set "EXIT_CODE=%ERRORLEVEL%"
 
 if "%EXIT_CODE%"=="0" (
