@@ -18,11 +18,11 @@ Proof of concept voor het automatisch analyseren van DUPLO-disassemblyvideo's. D
 
 Dubbelklik op `run_yolo_test.bat` vanuit de projectmap. Het script maakt `.venv` aan als die nog niet bestaat, installeert of controleert de packages uit `requirements.txt`, controleert de imports en voert daarna de YOLO-test uit op `data/Disassembly1.mp4`.
 
-De eerste run downloadt automatisch het pretrained model `models/yolo26x.pt` als dat nog ontbreekt. De resultaten komen in `outputs/Disassembly1/yolo/`, met detections in `yolo_detections.csv` en voorbeeldframes als JPG-bestanden.
+De eerste run downloadt automatisch het pretrained model `models/yolo26x.pt` als dat nog ontbreekt. De resultaten komen in `outputs/Disassembly1/yolo/`, met detections in `yolo_detections.csv`, voorbeeldframes als JPG-bestanden en een `yolo_debug.mp4` met de getekende bboxes en labels (uit te zetten met `save_yolo_video: false` in de config).
 
 ## Eerste MediaPipe-test
 
-Dubbelklik op `run_handpose_test.bat` om MediaPipe handpose op dezelfde video uit te voeren. De handlandmarks komen in `outputs/Disassembly1/handpose/hand_landmarks.csv` en geannoteerde voorbeeldframes worden als JPG-bestanden opgeslagen.
+Dubbelklik op `run_handpose_test.bat` om MediaPipe handpose op dezelfde video uit te voeren. De handlandmarks komen in `outputs/Disassembly1/handpose/hand_landmarks.csv` en geannoteerde voorbeeldframes worden als JPG-bestanden opgeslagen. Daarnaast schrijft de stap een `handpose_debug.mp4` met de getekende handlandmarks (uit te zetten met `save_handpose_video: false` in de config).
 
 ## ByteTrack-tracking
 

@@ -99,7 +99,8 @@ def main(cfg_path: str, device: str | None = None) -> None:
     low_conf = cfg.get("track_low_thresh", 0.1)
 
     rows = []
-    writer = None
+    video = (DebugVideoWriter(out_dir / "tracking_debug.mp4", fps / stride)
+             if save_video else None)
     frames = VideoFrames(cfg["video_path"], stride=stride, desc="ByteTrack")
     try:
         for frame_number, frame in frames:
@@ -110,19 +111,14 @@ def main(cfg_path: str, device: str | None = None) -> None:
             rows.extend(build_row(cfg["video_path"], frame_number, fps,
                                   observation, detector.class_names)
                         for observation in observations)
-            if save_video:
-                if writer is None:
-                    height, width = frame.shape[:2]
-                    writer = DebugVideoWriter(
-                        out_dir / "tracking_debug.mp4", fps / stride,
-                        (width, height))
+            if video is not None:
                 draw_tracks(frame, observations, tracker.trajectories,
                             detector.class_names)
-                writer.write(frame)
+                video.write(frame)
     finally:
         # Ook bij een onderbreking de debug-video netjes afsluiten.
-        if writer is not None:
-            writer.release()
+        if video is not None:
+            video.release()
 
     write_rows_csv(out_dir, "tracking_history.csv", rows, CSV_COLUMNS)
     track_ids = {row["track_id"] for row in rows}

@@ -6,6 +6,8 @@ max_hands: 2
 device: "gpu"                            # "cpu" of "gpu"; --device overschrijft dit
 frame_stride: 2                          # 1 = elk frame
 screenshot_every: 150                    # elke ~5 s bij 30 fps; 0 = geen voorbeeldframes
+save_yolo_video: true                    # debug-video met YOLO-bboxes en labels
+save_handpose_video: true                # debug-video met getekende handlandmarks
 track_high_thresh: 0.25                   # eerste associatie: alleen vrij zekere detecties (minder ruistracks)
 track_low_thresh: 0.1                    # ondergrens voor detecties; lagere scores worden in de tweede associatiestap gebruikt
 new_track_thresh: 0.25                    # minimale score om een nieuwe track te starten (minder kortstondige tracks)

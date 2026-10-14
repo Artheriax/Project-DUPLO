@@ -3,7 +3,8 @@ from duplo.cli import parse_args
 from duplo.config import load_config, resolve_device
 from duplo.gpu import ensure_cuda_torch
 from duplo.output import prepare_output_dir, save_screenshot, write_rows_csv
-from duplo.video import VideoFrames
+from duplo.video import VideoFrames, video_fps
+from duplo.video_writer import DebugVideoWriter
 
 CSV_COLUMNS = ["video", "frame", "klasse", "confidence",
                "bbox_x", "bbox_y", "bbox_w", "bbox_h"]
@@ -25,24 +26,35 @@ def main(cfg_path: str, device: str | None = None) -> None:
 
     model = YOLO(cfg["yolo_model"])
     screenshot_every = cfg.get("screenshot_every", 150)
+    stride = cfg.get("frame_stride", 1)
+    fps = video_fps(cfg["video_path"])
+    video = (DebugVideoWriter(out_dir / "yolo_debug.mp4", fps / stride)
+             if cfg.get("save_yolo_video", True) else None)
     rows = []
-    frames = VideoFrames(cfg["video_path"], stride=cfg.get("frame_stride", 1),
-                         desc="YOLO")
-    for frame_idx, frame in frames:
-        result = model.predict(
-            frame, conf=cfg["conf_threshold"], device=yolo_device, verbose=False
-        )[0]
-        for box in result.boxes:
-            rows.append({
-                "video": cfg["video_path"], "frame": frame_idx,
-                "klasse": result.names[int(box.cls)],
-                "confidence": round(float(box.conf), 3),
-                "bbox_x": int(box.xyxy[0][0]), "bbox_y": int(box.xyxy[0][1]),
-                "bbox_w": int(box.xyxy[0][2] - box.xyxy[0][0]),
-                "bbox_h": int(box.xyxy[0][3] - box.xyxy[0][1]),
-            })
-        if screenshot_every > 0 and frame_idx % screenshot_every == 0:
-            save_screenshot(out_dir, "yolo_frame", frame_idx, result.plot())
+    frames = VideoFrames(cfg["video_path"], stride=stride, desc="YOLO")
+    try:
+        for frame_idx, frame in frames:
+            result = model.predict(
+                frame, conf=cfg["conf_threshold"], device=yolo_device,
+                verbose=False
+            )[0]
+            for box in result.boxes:
+                rows.append({
+                    "video": cfg["video_path"], "frame": frame_idx,
+                    "klasse": result.names[int(box.cls)],
+                    "confidence": round(float(box.conf), 3),
+                    "bbox_x": int(box.xyxy[0][0]), "bbox_y": int(box.xyxy[0][1]),
+                    "bbox_w": int(box.xyxy[0][2] - box.xyxy[0][0]),
+                    "bbox_h": int(box.xyxy[0][3] - box.xyxy[0][1]),
+                })
+            if video is not None:
+                video.write(result.plot())
+            if screenshot_every > 0 and frame_idx % screenshot_every == 0:
+                save_screenshot(out_dir, "yolo_frame", frame_idx, result.plot())
+    finally:
+        # Ook bij een onderbreking de debug-video netjes afsluiten.
+        if video is not None:
+            video.release()
 
     write_rows_csv(out_dir, "yolo_detections.csv", rows, CSV_COLUMNS)
     print(f"{frames.frames_read} frames verwerkt, {len(rows)} detections -> {out_dir}")

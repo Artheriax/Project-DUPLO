@@ -11,6 +11,7 @@ from duplo.cli import parse_args
 from duplo.config import load_config, resolve_device
 from duplo.output import prepare_output_dir, save_screenshot, write_rows_csv
 from duplo.video import VideoFrames, video_fps
+from duplo.video_writer import DebugVideoWriter
 
 
 MODEL_URL = (
@@ -54,6 +55,14 @@ def draw_landmarks(frame, hand_landmarks) -> None:
         cv2.circle(frame, point, 4, (0, 0, 255), -1)
 
 
+def draw_all_hands(frame, hand_landmarks):
+    """Kopie van het frame met alle gedetecteerde handen erop getekend."""
+    annotated = frame.copy()
+    for landmarks in hand_landmarks:
+        draw_landmarks(annotated, landmarks)
+    return annotated
+
+
 def create_landmarker(cfg: dict, model_path: Path, delegate) -> vision.HandLandmarker:
     options = vision.HandLandmarkerOptions(
         base_options=python.BaseOptions(
@@ -88,30 +97,38 @@ def main(cfg_path: str, device: str | None = None) -> None:
     print(f"MediaPipe draait op {device.upper()}")
 
     fps = video_fps(cfg["video_path"])
+    stride = cfg.get("frame_stride", 1)
     screenshot_every = cfg.get("screenshot_every", 150)
+    video = (DebugVideoWriter(out_dir / "handpose_debug.mp4", fps / stride)
+             if cfg.get("save_handpose_video", True) else None)
     rows = []
-    frames = VideoFrames(cfg["video_path"], stride=cfg.get("frame_stride", 1),
-                         desc="MediaPipe")
-    with hands:
-        for frame_idx, frame in frames:
-            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-            timestamp_ms = int(frame_idx * 1000 / fps)
-            res = hands.detect_for_video(image, timestamp_ms)
-            if res.hand_landmarks:
-                for h_idx, landmarks in enumerate(res.hand_landmarks):
-                    for p_idx, point in enumerate(landmarks):
-                        rows.append({
-                            "video": cfg["video_path"], "frame": frame_idx,
-                            "hand": h_idx, "landmark": p_idx,
-                            "x": round(point.x, 4), "y": round(point.y, 4),
-                            "z": round(point.z, 4), "zichtbaar": 1.0,
-                        })
-                if screenshot_every > 0 and frame_idx % screenshot_every == 0:
-                    annotated = frame.copy()
-                    for landmarks in res.hand_landmarks:
-                        draw_landmarks(annotated, landmarks)
-                    save_screenshot(out_dir, "hand_frame", frame_idx, annotated)
+    frames = VideoFrames(cfg["video_path"], stride=stride, desc="MediaPipe")
+    try:
+        with hands:
+            for frame_idx, frame in frames:
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+                timestamp_ms = int(frame_idx * 1000 / fps)
+                res = hands.detect_for_video(image, timestamp_ms)
+                if res.hand_landmarks:
+                    for h_idx, landmarks in enumerate(res.hand_landmarks):
+                        for p_idx, point in enumerate(landmarks):
+                            rows.append({
+                                "video": cfg["video_path"], "frame": frame_idx,
+                                "hand": h_idx, "landmark": p_idx,
+                                "x": round(point.x, 4), "y": round(point.y, 4),
+                                "z": round(point.z, 4), "zichtbaar": 1.0,
+                            })
+                    if screenshot_every > 0 and frame_idx % screenshot_every == 0:
+                        annotated = draw_all_hands(frame, res.hand_landmarks)
+                        save_screenshot(out_dir, "hand_frame", frame_idx,
+                                        annotated)
+                if video is not None:
+                    video.write(draw_all_hands(frame, res.hand_landmarks))
+    finally:
+        # Ook bij een onderbreking de debug-video netjes afsluiten.
+        if video is not None:
+            video.release()
 
     write_rows_csv(out_dir, "hand_landmarks.csv", rows, CSV_COLUMNS)
     print(f"{frames.frames_read} frames verwerkt -> {out_dir}")
