@@ -6,8 +6,9 @@ Proof of concept voor het automatisch analyseren van DUPLO-disassemblyvideo's. D
 
 - `configs/` – instellingen per experiment (video, model, drempels, device)
 - `data/` – invoervideo's (niet in git)
+- `Documentation/` – [Opdracht.md](Documentation/Opdracht.md) (opdrachtomschrijving), [PLAN.md](Documentation/PLAN.md) (technisch plan) en [Modelvergelijking.md](Documentation/Modelvergelijking.md) (testrapport van de modelvergelijking)
 - `models/` – gedownloade modelgewichten: `yolo26x.pt` en `hand_landmarker.task` (niet in git)
-- `outputs/` – resultaten per video, per stap een eigen submap (`yolo/`, `handpose/`, `tracking/`) met CSV's, voorbeeldframes en debug-video
+- `outputs/` – resultaten per video, per stap een eigen submap (`yolo/`, `handpose/`, `tracking/`, `rfdetr/`, `rfdetr_seg/`, `grounding_dino/`, `yolo_world/`, `yolo_seg/`, `sam3/` en `comparison/`) met CSV's, voorbeeldframes en debug-video
 - `src/duplo/` – gedeelde componenten: CLI, config, GPU-setup, video-inlezen, output, detectie, ByteTrack-tracking en de benchmark-samenvatting per modelstap
 - `src/run_yolo_video.py` – YOLO-pipeline (detectie, in dit project gericht op gereedschappen)
 - `src/run_handpose.py` – MediaPipe-pipeline (handlandmarks)
@@ -64,6 +65,8 @@ score = 100 x (coverage x dekking + presence x tool-frames + speed x min(1, door
 ```
 
 De gewichten (`comparison_weights`) en `comparison_target_fps` (de doorvoer die nodig is om real-time te draaien: bronfps / frame_stride) staan in `configs/baseline.yaml`.
+
+Het volledige testrapport met de resultaten van alle modellen staat in [Documentation/Modelvergelijking.md](Documentation/Modelvergelijking.md).
 
 Let op de kanttekeningen in het rapport: er is geen geannoteerde ground truth, dus accuracy (precision/recall) kan niet worden gemeten; dekking en tool-frames zijn proxies en bevoordelen open-vocabulary modellen, die hun promptklassen per definitie kunnen terugvinden. Confidence is niet tussen modelfamilies te vergelijken. Gebruik de debug-video's en voorbeeldframes per stap voor het kwalitatieve oordeel.
 

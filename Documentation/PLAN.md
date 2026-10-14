@@ -279,7 +279,7 @@ Het trainen van een generiek disassemblymodel met YOLO is als te moeilijk en te 
 * waar het pretrained model tekortschiet en er voldoende geannoteerde frames zijn, wordt YOLO **uitsluitend op een kleine toolklassenlijst** gefinetuned;
 * finetuning is optioneel: de pipeline moet ook met het pretrained model kunnen werken.
 
-Naast YOLO worden in de baseline ook RF-DETR (detectie en segmentatie), Grounding DINO, YOLO-World, YOLO26-seg en SAM3 op dezelfde video getest, zodat de toolherkenning van de modellen onderling te vergelijken is (zie de sectie *Modelvergelijking: toolrecognition* in de README). Open-vocabulary modellen kunnen de toolklassen als tekstprompt krijgen en hebben daardoor geen finetuning nodig; de gesloten-vocabulaire modellen blijven beperkt tot hun COCO-klassen.
+Naast YOLO worden in de baseline ook RF-DETR (detectie en segmentatie), Grounding DINO, YOLO-World, YOLO26-seg en SAM3 op dezelfde video getest, zodat de toolherkenning van de modellen onderling te vergelijken is (zie de sectie *Modelvergelijking: toolrecognition* in de README). Open-vocabulary modellen kunnen de toolklassen als tekstprompt krijgen en hebben daardoor geen finetuning nodig; de gesloten-vocabulaire modellen blijven beperkt tot hun COCO-klassen. De meetresultaten en het advies staan in [Modelvergelijking.md](Modelvergelijking.md).
 
 De pretrained COCO-klassen worden niet één-op-één overgenomen. De toolklassenlijst wordt afgestemd op de gereedschappen uit de video's en de DUPLO-toolset.
 
