@@ -1,4 +1,5 @@
 """Vaste schrijfconventies voor resultaten (CSV en voorbeeldframes)."""
+from collections.abc import Sequence
 from pathlib import Path
 
 import cv2
@@ -16,8 +17,14 @@ def prepare_output_dir(cfg: dict, *subdirs: str) -> Path:
     return out_dir
 
 
-def write_rows_csv(out_dir: Path, filename: str, rows: list[dict]) -> None:
-    pd.DataFrame(rows).to_csv(out_dir / filename, index=False)
+def write_rows_csv(out_dir: Path, filename: str, rows: list[dict],
+                   columns: Sequence[str] | None = None) -> None:
+    """Schrijf de rijen als CSV.
+
+    columns houdt de kolomvolgorde vast en zorgt dat een run zonder resultaten
+    toch een CSV met kopregel oplevert in plaats van een leeg bestand.
+    """
+    pd.DataFrame(rows, columns=columns).to_csv(out_dir / filename, index=False)
 
 
 def save_screenshot(out_dir: Path, prefix: str, frame_idx: int, image) -> None:

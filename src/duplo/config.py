@@ -7,7 +7,10 @@ DEVICES = ("cpu", "gpu")
 
 
 def load_config(cfg_path: str) -> dict:
-    return yaml.safe_load(Path(cfg_path).read_text())
+    cfg = yaml.safe_load(Path(cfg_path).read_text(encoding="utf-8"))
+    if not isinstance(cfg, dict):
+        raise SystemExit(f"Configuratiebestand is leeg of ongeldig: {cfg_path}")
+    return cfg
 
 
 def resolve_device(cli_device: str | None, cfg: dict) -> str:

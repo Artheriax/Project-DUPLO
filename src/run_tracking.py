@@ -12,6 +12,11 @@ from duplo.tracking import ObjectTracker, TrackObservation
 from duplo.video import VideoFrames, video_fps
 from duplo.video_writer import DebugVideoWriter
 
+CSV_COLUMNS = ["video", "frame_number", "timestamp", "track_id", "class_id",
+               "class_name", "confidence", "bbox_x1", "bbox_y1", "bbox_x2",
+               "bbox_y2", "center_x", "center_y", "velocity_x", "velocity_y",
+               "track_age", "frames_since_detection", "status"]
+
 
 def track_color(track_id: int) -> tuple[int, int, int]:
     """Deterministische, per track goed te onderscheiden BGR-kleur."""
@@ -91,32 +96,35 @@ def main(cfg_path: str, device: str | None = None) -> None:
     fps = video_fps(cfg["video_path"])
     stride = cfg.get("frame_stride", 1)
     save_video = cfg.get("save_tracking_video", True)
+    low_conf = cfg.get("track_low_thresh", 0.1)
 
     rows = []
     writer = None
     frames = VideoFrames(cfg["video_path"], stride=stride, desc="ByteTrack")
-    for frame_number, frame in frames:
-        # Detecties met een lage score gaan mee: ByteTrack gebruikt die in de
-        # tweede associatiestap om occlusies te overbruggen.
-        detections = detector.detect(frame,
-                                     conf=cfg.get("track_low_thresh", 0.1))
-        observations = tracker.update(frame_number, frame, detections)
-        rows.extend(build_row(cfg["video_path"], frame_number, fps,
-                              observation, detector.class_names)
-                    for observation in observations)
-        if save_video:
-            if writer is None:
-                height, width = frame.shape[:2]
-                writer = DebugVideoWriter(
-                    out_dir / "tracking_debug.mp4", fps / stride,
-                    (width, height))
-            draw_tracks(frame, observations, tracker.trajectories,
-                        detector.class_names)
-            writer.write(frame)
-    if writer is not None:
-        writer.release()
+    try:
+        for frame_number, frame in frames:
+            # Detecties met een lage score gaan mee: ByteTrack gebruikt die in
+            # de tweede associatiestap om occlusies te overbruggen.
+            detections = detector.detect(frame, conf=low_conf)
+            observations = tracker.update(frame_number, frame, detections)
+            rows.extend(build_row(cfg["video_path"], frame_number, fps,
+                                  observation, detector.class_names)
+                        for observation in observations)
+            if save_video:
+                if writer is None:
+                    height, width = frame.shape[:2]
+                    writer = DebugVideoWriter(
+                        out_dir / "tracking_debug.mp4", fps / stride,
+                        (width, height))
+                draw_tracks(frame, observations, tracker.trajectories,
+                            detector.class_names)
+                writer.write(frame)
+    finally:
+        # Ook bij een onderbreking de debug-video netjes afsluiten.
+        if writer is not None:
+            writer.release()
 
-    write_rows_csv(out_dir, "tracking_history.csv", rows)
+    write_rows_csv(out_dir, "tracking_history.csv", rows, CSV_COLUMNS)
     track_ids = {row["track_id"] for row in rows}
     print(f"{frames.frames_read} frames verwerkt, {len(track_ids)} tracks, "
           f"{len(rows)} rijen -> {out_dir}")

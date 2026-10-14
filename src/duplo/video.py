@@ -7,8 +7,20 @@ import numpy as np
 from tqdm import tqdm
 
 
-def video_fps(video_path: str) -> float:
+def open_video(video_path: str) -> cv2.VideoCapture:
+    """Open de video en stop met een duidelijke melding als dat niet lukt."""
     video = cv2.VideoCapture(video_path)
+    if not video.isOpened():
+        video.release()
+        raise SystemExit(
+            f"Kon de video niet openen: {video_path} "
+            "(controleer het pad en of het bestand een leesbaar videoformaat heeft)"
+        )
+    return video
+
+
+def video_fps(video_path: str) -> float:
+    video = open_video(video_path)
     fps = video.get(cv2.CAP_PROP_FPS) or 30.0
     video.release()
     return fps
@@ -23,6 +35,9 @@ class VideoFrames:
 
     Yields (frame_idx, frame) voor elk frame waarop frame_idx % stride == 0;
     na de iteratie bevat frames_read het aantal ingelezen frames.
+
+    Overgeslagen frames worden alleen gedemultiplext (grab) en niet gedecodeerd
+    (retrieve), wat bij stride > 1 decodeertijd scheelt.
     """
 
     def __init__(self, video_path: str, stride: int = 1, desc: str = "Video") -> None:
@@ -32,7 +47,7 @@ class VideoFrames:
         self.frames_read = 0
 
     def __iter__(self) -> Iterator[tuple[int, np.ndarray]]:
-        video = cv2.VideoCapture(self.video_path)
+        video = open_video(self.video_path)
         total = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
         progress = tqdm(total=total if total > 0 else None, desc=self.desc,
                         unit="frame", disable=None)
@@ -40,10 +55,7 @@ class VideoFrames:
         last_report = time.monotonic()
         try:
             frame_idx = 0
-            while True:
-                ok, frame = video.read()
-                if not ok:
-                    break
+            while video.grab():
                 self.frames_read = frame_idx + 1
                 progress.update(1)
                 if progress.disable and report_step:
@@ -55,6 +67,9 @@ class VideoFrames:
                         print(f"{self.desc}: {percent}% "
                               f"({self.frames_read}/{total} frames)", flush=True)
                 if frame_idx % self.stride == 0:
+                    ok, frame = video.retrieve()
+                    if not ok:
+                        break
                     yield frame_idx, frame
                 frame_idx += 1
         finally:

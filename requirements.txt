@@ -1,8 +1,9 @@
-ultralytics
+ultralytics==8.4.174  # vastgepind: de tracking-integratie gebruikt interne BYTETracker-API's
 lap
 mediapipe
 opencv-python
 pandas
+numpy
 pyyaml
 tqdm
 imageio-ffmpeg

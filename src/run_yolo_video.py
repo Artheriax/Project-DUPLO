@@ -5,6 +5,9 @@ from duplo.gpu import ensure_cuda_torch
 from duplo.output import prepare_output_dir, save_screenshot, write_rows_csv
 from duplo.video import VideoFrames
 
+CSV_COLUMNS = ["video", "frame", "klasse", "confidence",
+               "bbox_x", "bbox_y", "bbox_w", "bbox_h"]
+
 
 def main(cfg_path: str, device: str | None = None) -> None:
     cfg = load_config(cfg_path)
@@ -21,6 +24,7 @@ def main(cfg_path: str, device: str | None = None) -> None:
     print(f"YOLO draait op {yolo_device.upper()}")
 
     model = YOLO(cfg["yolo_model"])
+    screenshot_every = cfg.get("screenshot_every", 150)
     rows = []
     frames = VideoFrames(cfg["video_path"], stride=cfg.get("frame_stride", 1),
                          desc="YOLO")
@@ -37,10 +41,10 @@ def main(cfg_path: str, device: str | None = None) -> None:
                 "bbox_w": int(box.xyxy[0][2] - box.xyxy[0][0]),
                 "bbox_h": int(box.xyxy[0][3] - box.xyxy[0][1]),
             })
-        if frame_idx % cfg["screenshot_every"] == 0:
+        if screenshot_every > 0 and frame_idx % screenshot_every == 0:
             save_screenshot(out_dir, "yolo_frame", frame_idx, result.plot())
 
-    write_rows_csv(out_dir, "yolo_detections.csv", rows)
+    write_rows_csv(out_dir, "yolo_detections.csv", rows, CSV_COLUMNS)
     print(f"{frames.frames_read} frames verwerkt, {len(rows)} detections -> {out_dir}")
 
 

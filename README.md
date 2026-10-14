@@ -51,7 +51,7 @@ Of direct via Python:
 .venv\Scripts\python.exe src\run_tracking.py --config configs\baseline.yaml --device gpu
 ```
 
-Zonder argument gebruiken de scripts de waarde van `device` in `configs\baseline.yaml` (standaard `cpu`).
+Zonder argument gebruiken de scripts de waarde van `device` in `configs\baseline.yaml` (daar staat `gpu`; met `--device cpu` dwing je een CPU-run af).
 
 **YOLO:** bij `--device gpu` controleert het script of torch CUDA ondersteunt en installeert het automatisch de CUDA-build van torch (`--index-url https://download.pytorch.org/whl/cu130`) als dat nog niet het geval is. De eerste keer kan dit enkele minuten duren (download van ca. 2 GB). De ByteTrack-tracker in `run_tracking.py` draait op de CPU en heeft geen CUDA nodig; alleen de YOLO-detectie gebruikt de GPU.
 
