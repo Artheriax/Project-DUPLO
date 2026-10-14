@@ -1,4 +1,7 @@
 """YOLO-objectdetectie op een video; logt detections naar CSV en slaat frames op."""
+import time
+
+from duplo.benchmark import InferenceTimer, write_run_summary
 from duplo.cli import parse_args
 from duplo.config import load_config, resolve_device
 from duplo.gpu import ensure_cuda_torch
@@ -28,16 +31,19 @@ def main(cfg_path: str, device: str | None = None) -> None:
     screenshot_every = cfg.get("screenshot_every", 150)
     stride = cfg.get("frame_stride", 1)
     fps = video_fps(cfg["video_path"])
+    timer = InferenceTimer()
     video = (DebugVideoWriter(out_dir / "yolo_debug.mp4", fps / stride)
              if cfg.get("save_yolo_video", True) else None)
     rows = []
     frames = VideoFrames(cfg["video_path"], stride=stride, desc="YOLO")
+    started = time.perf_counter()
     try:
         for frame_idx, frame in frames:
-            result = model.predict(
-                frame, conf=cfg["conf_threshold"], device=yolo_device,
-                verbose=False
-            )[0]
+            with timer:
+                result = model.predict(
+                    frame, conf=cfg["conf_threshold"], device=yolo_device,
+                    verbose=False
+                )[0]
             for box in result.boxes:
                 rows.append({
                     "video": cfg["video_path"], "frame": frame_idx,
@@ -57,7 +63,15 @@ def main(cfg_path: str, device: str | None = None) -> None:
             video.release()
 
     write_rows_csv(out_dir, "yolo_detections.csv", rows, CSV_COLUMNS)
-    print(f"{frames.frames_read} frames verwerkt, {len(rows)} detections -> {out_dir}")
+    summary = write_run_summary(
+        out_dir, "yolo", model=cfg["yolo_model"], device=device,
+        video=cfg["video_path"], frames_read=frames.frames_read,
+        frames_processed=len(timer.times_ms),
+        elapsed_s=time.perf_counter() - started, rows=rows, timer=timer,
+        csv_file="yolo_detections.csv",
+        extra={"conf_threshold": cfg["conf_threshold"], "frame_stride": stride})
+    print(f"{frames.frames_read} frames verwerkt, {len(rows)} detections, "
+          f"{summary['inference_fps']} fps -> {out_dir}")
 
 
 if __name__ == "__main__":

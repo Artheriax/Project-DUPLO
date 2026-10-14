@@ -8,17 +8,64 @@ Proof of concept voor het automatisch analyseren van DUPLO-disassemblyvideo's. D
 - `data/` – invoervideo's (niet in git)
 - `models/` – gedownloade modelgewichten: `yolo26x.pt` en `hand_landmarker.task` (niet in git)
 - `outputs/` – resultaten per video, per stap een eigen submap (`yolo/`, `handpose/`, `tracking/`) met CSV's, voorbeeldframes en debug-video
-- `src/duplo/` – gedeelde componenten: CLI, config, GPU-setup, video-inlezen, output, detectie en ByteTrack-tracking
+- `src/duplo/` – gedeelde componenten: CLI, config, GPU-setup, video-inlezen, output, detectie, ByteTrack-tracking en de benchmark-samenvatting per modelstap
 - `src/run_yolo_video.py` – YOLO-pipeline (detectie, in dit project gericht op gereedschappen)
 - `src/run_handpose.py` – MediaPipe-pipeline (handlandmarks)
 - `src/run_tracking.py` – YOLO + ByteTrack-pipeline (objecten volgen over frames)
-- `run_yolo_test.bat` / `run_handpose_test.bat` / `run_tracking_test.bat` – startscripts voor Windows
+- `src/run_rfdetr_video.py` – RF-DETR-detectie (COCO-gewichten)
+- `src/run_rfdetr_seg_video.py` – RF-DETR-segmentatie (maskers)
+- `src/run_grounding_dino_video.py` – Grounding DINO (open-vocabulary, tekstprompt met toolklassen)
+- `src/run_yolo_world_video.py` – YOLO-World (open-vocabulary, tekstprompt met toolklassen)
+- `src/run_yolo_seg_video.py` – YOLO26-segmentatie (maskers)
+- `src/run_sam3_video.py` – SAM3-segmentatie (open-vocabulary, vereist Hugging Face-toegang)
+- `src/compare_models.py` – vergelijkt de modeltesten op tooldetectie en snelheid
+- `run_yolo_test.bat` / `run_handpose_test.bat` / `run_tracking_test.bat` / `run_rfdetr_test.bat` / `run_rfdetr_seg_test.bat` / `run_grounding_dino_test.bat` / `run_yolo_world_test.bat` / `run_yolo_seg_test.bat` / `run_sam3_test.bat` / `run_compare_models.bat` – startscripts voor Windows
 
 ## Eerste YOLO-test
 
 Dubbelklik op `run_yolo_test.bat` vanuit de projectmap. Het script maakt `.venv` aan als die nog niet bestaat, installeert of controleert de packages uit `requirements.txt`, controleert de imports en voert daarna de YOLO-test uit op `data/Disassembly1.mp4`.
 
-De eerste run downloadt automatisch het pretrained model `models/yolo26x.pt` als dat nog ontbreekt. De resultaten komen in `outputs/Disassembly1/yolo/`, met detections in `yolo_detections.csv`, voorbeeldframes als JPG-bestanden en een `yolo_debug.mp4` met de getekende bboxes en labels (uit te zetten met `save_yolo_video: false` in de config).
+De eerste run downloadt automatisch het pretrained model `models/yolo26x.pt` als dat nog ontbreekt. De resultaten komen in `outputs/Disassembly1/yolo/`, met detections in `yolo_detections.csv`, voorbeeldframes als JPG-bestanden en een `yolo_debug.mp4` met de getekende bboxes en labels (uit te zetten met `save_yolo_video: false` in de config). Daarnaast schrijft de stap `yolo_summary.json` met de rekentijd per frame, zodat YOLO in `compare_models.py` als baseline meekan.
+
+## Modelvergelijking: toolrecognition
+
+Voor de toolrecognition zijn naast YOLO zes alternatieven toegevoegd met dezelfde opzet (video in, CSV + voorbeeldframes + debug-video uit). Elk model schrijft in een eigen submap van `outputs/Disassembly1/` en levert naast de CSV ook een `<model>_summary.json` met frames, detections en rekentijd:
+
+| Startscript | Modelstap | Soort | Submap |
+| --- | --- | --- | --- |
+| `run_yolo_test.bat` | YOLO26x (baseline) | gesloten vocabulaire (80 COCO-klassen) | `yolo/` |
+| `run_rfdetr_test.bat` | RF-DETR Large | gesloten vocabulaire (80 COCO-klassen) | `rfdetr/` |
+| `run_grounding_dino_test.bat` | Grounding DINO base | open-vocabulary (tekstprompt) | `grounding_dino/` |
+| `run_yolo_world_test.bat` | YOLO-World v2 X | open-vocabulary (tekstprompt) | `yolo_world/` |
+| `run_yolo_seg_test.bat` | YOLO26x-seg | segmentatie | `yolo_seg/` |
+| `run_rfdetr_seg_test.bat` | RF-DETR Seg 2XLarge | segmentatie | `rfdetr_seg/` |
+| `run_sam3_test.bat` | SAM3 | segmentatie, open-vocabulary | `sam3/` |
+
+De doelgereedschappen staan als `tool_classes` in `configs/baseline.yaml` (schroevendraaier, steeksleutel, tang, snijder, hamer). De open-vocabulary modellen krijgen die lijst als tekstprompt; de andere modellen gebruiken hun eigen COCO-klassen en kunnen dus alleen gereedschappen vinden die in COCO zitten. De segmentatiestappen loggen ook `mask_area` (maskeroppervlak in pixels).
+
+De nieuwe stappen gebruiken dezelfde kolomopzet als de YOLO-test (`video`, `frame`, `klasse`, `confidence`, `bbox_x`, `bbox_y`, `bbox_w`, `bbox_h`), aangevuld met `timestamp` en bij segmentatie met `mask_area` (maskeroppervlak in pixels), zodat de resultaten onderling te vergelijken zijn.
+
+**SAM3:** de gewichten van `facebook/sam3` staan achter een Hugging Face-toegangsaanvraag: vraag toegang aan op https://huggingface.co/facebook/sam3 en log daarna in met `hf auth login`. Op Windows is daarnaast `triton-windows` nodig (sam3 importeert `triton`; het officiële pakket heeft geen Windows-wheels) — beide packages staan in `requirements.txt`. Het pip-pakket mist het BPE-vocabulaire voor de tekstencoder; [run_sam3_video.py](src/run_sam3_video.py) haalt dat eenmalig uit de sam3-repo en zet het in `models/`.
+
+De nieuwste SAM 3.1-checkpoints (Object Multiplex) verbeteren het *videomodel* (`sam3.1_multiplex.pt`); de beeldinferentie in deze test gebruikt in de nieuwste code dezelfde `sam3.pt`, dus de vergelijking draait met de actuele SAM3-gewichten. De repositoryversie van de code pint `numpy<2` en vraagt `pkg_resources` (`setuptools<81`); gebruik daarvoor een aparte venv.
+
+### Vergelijken
+
+Draai eerst de testen die je wilt vergelijken en daarna:
+
+```bat
+run_compare_models.bat
+```
+
+`src/compare_models.py` leest alle modelstappen in `outputs/Disassembly1/` (CSV + summary) en schrijft `outputs/Disassembly1/comparison/model_comparison.csv` en `model_comparison.md` met daarin per model: gevonden toolklassen, tool-detecties, aandeel frames met een tool, gemiddelde confidence, detecties per frame, rekentijd en doorvoer. De rangschikking is een expliciet weegbare heuristic:
+
+```text
+score = 100 x (coverage x dekking + presence x tool-frames + speed x min(1, doorvoer/target_fps))
+```
+
+De gewichten (`comparison_weights`) en `comparison_target_fps` (de doorvoer die nodig is om real-time te draaien: bronfps / frame_stride) staan in `configs/baseline.yaml`.
+
+Let op de kanttekeningen in het rapport: er is geen geannoteerde ground truth, dus accuracy (precision/recall) kan niet worden gemeten; dekking en tool-frames zijn proxies en bevoordelen open-vocabulary modellen, die hun promptklassen per definitie kunnen terugvinden. Confidence is niet tussen modelfamilies te vergelijken. Gebruik de debug-video's en voorbeeldframes per stap voor het kwalitatieve oordeel.
 
 ## Eerste MediaPipe-test
 
@@ -41,6 +88,12 @@ De scripts accepteren een `--device` argument met de waarden `cpu` of `gpu`:
 run_yolo_test.bat --device gpu
 run_handpose_test.bat --device gpu
 run_tracking_test.bat --device gpu
+run_rfdetr_test.bat --device gpu
+run_rfdetr_seg_test.bat --device gpu
+run_grounding_dino_test.bat --device gpu
+run_yolo_world_test.bat --device gpu
+run_yolo_seg_test.bat --device gpu
+run_sam3_test.bat --device gpu
 ```
 
 Of direct via Python:
@@ -49,6 +102,7 @@ Of direct via Python:
 .venv\Scripts\python.exe src\run_yolo_video.py --config configs\baseline.yaml --device gpu
 .venv\Scripts\python.exe src\run_handpose.py --config configs\baseline.yaml --device gpu
 .venv\Scripts\python.exe src\run_tracking.py --config configs\baseline.yaml --device gpu
+.venv\Scripts\python.exe src\run_rfdetr_video.py --config configs\baseline.yaml --device gpu
 ```
 
 Zonder argument gebruiken de scripts de waarde van `device` in `configs\baseline.yaml` (daar staat `gpu`; met `--device cpu` dwing je een CPU-run af).

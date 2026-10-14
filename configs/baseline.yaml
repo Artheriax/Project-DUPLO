@@ -16,3 +16,23 @@ match_thresh: 0.8                        # associatiedrempel voor de eerste stap
 fuse_score: true                         # detectiescore meewegen in de associatie-afstand
 track_trajectory_length: 60              # lengte van de getekende trajectory in de debug-video
 save_tracking_video: true                # debug-video met bboxes, track-ID's en trajectories
+
+# Modelvergelijking: toolrecognition met alternatieve detectie-/segmentatiemodellen
+tool_classes: ["screwdriver", "wrench", "pliers", "cutter", "hammer"]
+yolo_world_model: "models/yolov8x-worldv2.pt"   # YOLO-World v2; tekstprompt uit tool_classes
+yolo_seg_model: "models/yolo26x-seg.pt"         # YOLO26-segmentatie
+rfdetr_model: "RFDETRLarge"                      # RF-DETR-detectie (Apache-2.0-gewichten)
+rfdetr_seg_model: "RFDETRSeg2XLarge"             # RF-DETR-segmentatie
+rfdetr_optimize: true                            # FP16 + compile bij een GPU-run
+grounding_dino_model: "IDEA-Research/grounding-dino-base"
+grounding_dino_text_threshold: 0.25              # drempel voor de promptwoorden in de tekst
+# grounding_dino_prompt: "screwdriver. wrench. ..."  # optioneel: eigen tekstprompt
+# sam3_checkpoint: "models/sam3.pt"              # optioneel: lokaal checkpoint (anders facebook/sam3)
+save_rfdetr_video: true                          # debug-video per modelstap
+save_rfdetr_seg_video: true
+save_yolo_world_video: true
+save_yolo_seg_video: true
+save_grounding_dino_video: true
+save_sam3_video: true
+comparison_target_fps: 15                        # doorvoer voor real-time: bronfps / frame_stride
+comparison_weights: {coverage: 0.4, presence: 0.3, speed: 0.3}  # weging in compare_models.py
