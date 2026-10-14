@@ -1,21 +1,29 @@
-# Technisch plan – DUPLO Human Action Recognition
+# Technisch plan – DUPLO Tool Recognition & Human Action Recognition
 
 ## 1. Doel van het project
 
-We bouwen een modulaire video-analysepipeline voor DUPLO-disassembly waarmee we onderzoeken in hoeverre disassemblyprocessen automatisch uit video kunnen worden herkend en gestructureerd.
+We bouwen een modulaire video-analysepipeline voor DUPLO-disassembly waarmee we onderzoeken in hoeverre disassemblyprocessen automatisch uit video kunnen worden herkend en gestructureerd. De scope is bewust beperkt tot twee hoofddoelen: **tool recognition** (het herkennen en volgen van gebruikte gereedschappen) en **human action recognition** (het herkennen van de menselijke handelingen tijdens het demonteren).
 
 De pipeline moet uiteindelijk informatie kunnen verzamelen over:
 
-* welke objecten/componenten aanwezig zijn;
 * welke gereedschappen worden gebruikt;
-* welke objecten door de tijd gevolgd worden;
-* waar en hoe de handen bewegen;
+* welke gereedschappen door de tijd gevolgd worden;
+* waar en hoe de handen en het lichaam van de monteur bewegen;
 * welke handelingen plaatsvinden;
 * wanneer een handeling begint en eindigt.
 
 Deze informatie moet later bruikbaar zijn voor onder andere **eDIM/reDIM, Disassembly Graphs, tool taxonomy en toekomstige work instructions**.
 
 Het project is een proof of concept. Het doel is daarom niet om direct een volledig productierijp systeem te bouwen, maar om experimenteel vast te stellen wat technisch haalbaar is en waar de beperkingen liggen.
+
+### Scope-beslissing
+
+Tijdens het project is besloten om **geen generiek disassembly-model te trainen**. Het finetunen van YOLO op een volledige set disassemblyobjecten (componenten, connectoren, losse onderdelen) blijkt te moeilijk en te tijdrovend voor de beschikbare projectduur. In plaats daarvan richten we ons op:
+
+1. **Tool recognition** – het herkennen van gereedschappen met pretrained modellen en, waar haalbaar, gerichte finetuning op een kleine toolklassenlijst;
+2. **Human action recognition** – het herkennen van handelingen op basis van hand- en lichaamskeypoints en toolgebruik.
+
+Andere herkenningsvormen (generieke component- en connectorherkenning, een volledig disassemblymodel) vallen expliciet buiten scope. Ze worden alleen nog als toekomstig werk genoemd, niet als doel voor dit project.
 
 ---
 
@@ -27,26 +35,26 @@ Video
   ▼
 Frame extraction
   │
-  ├───────────────────────┐
-  ▼                       ▼
-YOLO object detection   MediaPipe Hands
-  │                       │
-  ▼                       ▼
-Bounding boxes          21 landmarks/hand
-  │                       │
-  ▼                       │
-Object tracking           │
-(ByteTrack)               │
-  │                       │
-  ▼                       ▼
-Object IDs + history + hand movement
+  ├─────────────────────────┐
+  ▼                         ▼
+YOLO tooldetectie         MediaPipe Hands
+  │                         │
+  ▼                         ▼
+Bounding boxes            21 landmarks/hand
+  │                         │
+  ▼                         │
+Tool tracking               │
+(ByteTrack)                 │
+  │                         │
+  ▼                         ▼
+Tool IDs + history + hand movement
              │
              ▼
       Gecombineerde
       temporele data
              │
              ▼
-      Action recognition
+      Human action recognition
              │
              ▼
   Disassembly action labels
@@ -56,15 +64,15 @@ Object IDs + history + hand movement
  Tool taxonomy / work instructions
 ```
 
-De pipeline wordt in fases opgebouwd. Eerst wordt onderzocht wat met bestaande pretrained modellen mogelijk is. Daarna wordt de dataset uitgebreid en worden relevante modellen gefinetuned.
+De pipeline wordt in fases opgebouwd. Eerst wordt onderzocht wat met bestaande pretrained modellen mogelijk is (YOLO voor tooldetectie en tracking, MediaPipe voor handinformatie). Daarna wordt de dataset uitgebreid en wordt het action-recognitionmodel ontwikkeld. Er wordt géén generiek disassemblymodel getraind; finetuning van YOLO gebeurt uitsluitend gericht op de toolklassen waar dat haalbaar is.
 
 ---
 
 # 3. Fase 1 – Technische baseline
 
-## 3.1 YOLO objectdetectie
+## 3.1 YOLO tooldetectie
 
-Gebruik YOLO26X met pretrained weights als eerste baseline.
+Gebruik YOLO26X met pretrained weights als eerste baseline voor de detectie van gereedschappen.
 
 Per frame worden minimaal opgeslagen:
 
@@ -75,35 +83,33 @@ Per frame worden minimaal opgeslagen:
 * confidence
 * bounding box: x1, y1, x2, y2
 
-De pretrained versie wordt gebruikt om te onderzoeken welke informatie al zonder training uit de beschikbare video's kan worden gehaald.
+De pretrained versie wordt gebruikt om te onderzoeken welke gereedschappen al zonder training uit de beschikbare video's kunnen worden gehaald (bijvoorbeeld schroevendraaiers, tangen en andere gangbare tools).
 
 ### Belangrijke beperking
 
-Het pretrained model is getraind op algemene objectklassen en bevat niet noodzakelijk de objecten die voor DUPLO relevant zijn.
+Het pretrained model is getraind op algemene objectklassen en bevat niet noodzakelijk de gereedschappen die voor DUPLO relevant zijn.
 
-Voorbeelden:
+Voorbeelden van tools die mogelijk niet of onvoldoende worden gedetecteerd:
 
-* schroeven;
 * specifieke schroevendraaiers;
-* connectoren;
-* kabels;
-* specifieke productonderdelen.
+* precisiegereedschap;
+* minder gangbare tools uit de DUPLO-toolset.
 
-Wanneer een object niet door YOLO wordt gedetecteerd, kan ByteTrack dit object ook niet volgen.
+Wanneer een tool niet door YOLO wordt gedetecteerd, kan ByteTrack deze ook niet volgen en mist de action recognition een belangrijk signaal.
 
-De baseline wordt daarom vooral gebruikt om de **gap tussen een generiek pretrained model en de DUPLO-specifieke toepassing** te bepalen.
+De baseline wordt daarom vooral gebruikt om de **gap tussen een generiek pretrained model en de DUPLO-specifieke toolset** te bepalen.
 
 ---
 
-# 4. Fase 2 – Object tracking
+# 4. Fase 2 – Tool tracking
 
-Wanneer YOLO een object detecteert, worden de detecties doorgegeven aan een multi-object tracker.
+Wanneer YOLO een gereedschap detecteert, worden de detecties doorgegeven aan een multi-object tracker.
 
 Er wordt gebruikgemaakt van **ByteTrack**, de tracker die ook in de Ultralytics-tooling is opgenomen.
 
 ByteTrack moet:
 
-* dezelfde objecten over meerdere frames koppelen;
+* dezelfde gereedschappen over meerdere frames koppelen;
 * een unieke track_id geven;
 * bewegingsinformatie gebruiken (Kalman-filter);
 * detecties met een lage confidence in een tweede associatiestap gebruiken;
@@ -113,25 +119,25 @@ Voorbeeld:
 
 ```text
 Frame 100:
-screw → track_id 17
+screwdriver → track_id 17
 
 Frame 101:
-screw → track_id 17
+screwdriver → track_id 17
 
 Frame 102:
-screw → track_id 17
+screwdriver → track_id 17
 
 Frame 103:
-screw → track_id 17
+screwdriver → track_id 17
 ```
 
-Hierdoor ontstaat een objectgeschiedenis in plaats van alleen losse frame-detecties.
+Hierdoor ontstaat een gereedschapgeschiedenis in plaats van alleen losse frame-detecties. Die geschiedenis is later een belangrijk signaal voor de action recognition: welk gereedschap wordt wanneer gepakt, gebruikt en weggelegd.
 
 Omdat DUPLO-disassembly veel beweging en occlusion bevat, kan ByteTrack later worden vergeleken met alternatieven zoals **BoT-SORT**.
 
 ---
 
-# 5. Fase 3 – Object history
+# 5. Fase 3 – Tool history
 
 Per track_id wordt een tijdreeks opgeslagen.
 
@@ -139,7 +145,7 @@ Bijvoorbeeld:
 
 ```text
 track_id: 17
-class: screw
+class: screwdriver
 
 frame 100 → bbox + center + confidence
 frame 101 → bbox + center + confidence
@@ -158,7 +164,7 @@ Waar mogelijk worden aanvullende eigenschappen berekend:
 * visibility/status
 * trajectory
 
-Hiermee kan later worden onderzocht of bewegingen van objecten kunnen helpen bij het herkennen van disassembly actions.
+Hiermee kan later worden onderzocht of het gebruik van gereedschappen (oppakken, verplaatsen, neerleggen) kan helpen bij het herkennen van disassembly actions.
 
 ---
 
@@ -178,27 +184,27 @@ De handdata krijgt dezelfde:
 * frame_number;
 * timestamp;
 
-als de objectdetecties en trackingdata.
+als de tooldetecties en trackingdata.
 
 Hierdoor kunnen bijvoorbeeld de volgende gebeurtenissen later worden geanalyseerd:
 
 ```text
-hand approaches object
+hand approaches tool
         ↓
-hand touches object
+hand touches tool
         ↓
-object starts moving
+tool starts moving
         ↓
-object moves away
+tool moves away
 ```
 
-MediaPipe levert hiermee belangrijke informatie voor actieherkenning zonder dat hiervoor direct een zwaar pose-estimationmodel nodig is.
+MediaPipe levert hiermee belangrijke informatie voor human action recognition zonder dat hiervoor direct een zwaar pose-estimationmodel nodig is.
 
 ---
 
 # 7. Fase 5 – Definitie van acties en labels
 
-Voordat een action-recognitionmodel wordt getraind, wordt een beperkte actietaxonomie opgesteld.
+Voordat een human-action-recognitionmodel wordt getraind, wordt een beperkte actietaxonomie opgesteld.
 
 De voorgestelde startcategorieën zijn gebaseerd op de opdracht:
 
@@ -231,18 +237,13 @@ Hierdoor wordt niet alleen "remove" herkend, maar ontstaat informatie die later 
 
 # 8. Fase 6 – Dataset en annotatie
 
-De beschikbare DUPLO-video's worden gebruikt om een kleine gelabelde dataset op te bouwen.
+De beschikbare DUPLO-video's worden gebruikt om een kleine gelabelde dataset op te bouwen, gericht op tools en acties.
 
 De dataset bestaat uit meerdere informatielagen:
 
-### Objectannotaties
+### Toolannotaties
 
-Bounding boxes voor relevante:
-
-* componenten;
-* gereedschappen;
-* connectoren;
-* andere objecten die relevant zijn voor de acties.
+Bounding boxes voor de gereedschappen die in de video's worden gebruikt en die relevant zijn voor de action recognition (bijvoorbeeld schroevendraaiers, tangen en ander precisiegereedschap).
 
 ### Actieannotaties
 
@@ -257,7 +258,6 @@ Acties krijgen:
 Relaties tussen:
 
 * hand;
-* object;
 * gereedschap;
 * actie.
 
@@ -267,38 +267,41 @@ Bijvoorbeeld:
 hand → screwdriver → screw
 ```
 
-Dit maakt het mogelijk om later complexere acties te herkennen.
+Dit maakt het mogelijk om later complexere acties te herkennen. Objecten die geen gereedschap zijn (componenten, kabels, connectoren) worden hierbij alleen meegenomen voor zover ze nodig zijn om een actie te beschrijven; er wordt geen generieke object- of connectordataset opgebouwd.
 
 ---
 
-# 9. Fase 7 – YOLO fine-tuning
+# 9. Fase 7 – Tool recognition
 
-Zodra voldoende relevante frames zijn geannoteerd, wordt YOLO gefinetuned op de eigen DUPLO-objectklassen.
+Het trainen van een generiek disassemblymodel met YOLO is als te moeilijk en te tijdrovend beoordeeld en valt daarom buiten scope. In plaats daarvan bestaat fase 7 uit **tool recognition**:
 
-De pretrained COCO-klassen worden niet één-op-één overgenomen. De nieuwe dataset bepaalt welke klassen het uiteindelijke model moet herkennen.
+* het pretrained YOLO-model wordt geëvalueerd op de gereedschappen die in de DUPLO-video's voorkomen;
+* waar het pretrained model tekortschiet en er voldoende geannoteerde frames zijn, wordt YOLO **uitsluitend op een kleine toolklassenlijst** gefinetuned;
+* finetuning is optioneel: de pipeline moet ook met het pretrained model kunnen werken.
+
+De pretrained COCO-klassen worden niet één-op-één overgenomen. De toolklassenlijst wordt afgestemd op de gereedschappen uit de video's en de DUPLO-toolset.
 
 Bijvoorbeeld:
 
 ```text
 0 = screwdriver
-1 = screw
-2 = connector
-3 = cable
-4 = component_A
-5 = component_B
+1 = wrench
+2 = pliers
+3 = cutter
+4 = other_tool
 ```
 
-Objecten die niet relevant zijn voor de toepassing hoeven niet als klasse in het uiteindelijke model te worden opgenomen.
-
-Dit kan bijvoorbeeld voorkomen dat een hand als `person` wordt gedetecteerd, omdat `person` geen relevante klasse hoeft te zijn wanneer MediaPipe Hands specifiek voor handinformatie wordt gebruikt.
+Alleen gereedschappen komen als klasse in het model. Een hand kan bijvoorbeeld als `person` worden gedetecteerd, maar `person` is geen relevante klasse omdat MediaPipe Hands specifiek voor handinformatie wordt gebruikt.
 
 De pretrained YOLO-weights worden gebruikt als startpunt voor transfer learning.
 
+Als finetuning niet haalbaar blijkt, wordt de toolherkenning gebaseerd op de pretrained klassen en wordt dit als beperking gerapporteerd.
+
 ---
 
-# 10. Fase 8 – Action recognition
+# 10. Fase 8 – Human action recognition
 
-Pas nadat voldoende temporele data en actielabels beschikbaar zijn, wordt onderzocht welke methode geschikt is voor daadwerkelijke actieherkenning.
+Pas nadat voldoende temporele data en actielabels beschikbaar zijn, wordt onderzocht welke methode geschikt is voor daadwerkelijke herkenning van menselijke handelingen.
 
 Mogelijke kandidaten zijn:
 
@@ -306,7 +309,7 @@ Mogelijke kandidaten zijn:
 * temporal action detection;
 * video classification;
 * een eigen lichtgewicht temporal model;
-* een combinatie van object trajectories en hand landmarks.
+* een combinatie van tool trajectories en hand landmarks.
 
 De keuze wordt gebaseerd op:
 
@@ -316,22 +319,20 @@ De keuze wordt gebaseerd op:
 * interpreteerbaarheid;
 * benodigde temporele informatie.
 
-Het action-recognitionmodel hoeft dus niet noodzakelijk end-to-end op de volledige video te werken.
+Het human-action-recognitionmodel hoeft dus niet noodzakelijk end-to-end op de volledige video te werken.
 
 Een mogelijke input is bijvoorbeeld:
 
 ```text
 Hand landmarks
        +
-Object track history
+Tool track history
        +
-Object classes
-       +
-Tool information
+Tool classes
        ↓
 Temporal model
        ↓
-"Remove component"
+"Unscrewing" / "Tool change" / "Remove component"
 ```
 
 ---
@@ -357,16 +358,15 @@ action_start
 action_end
 ```
 
+De velden `track_id`, `object_class` en `bbox` hebben in dit project betrekking op **gereedschappen**; het formaat is bewust generiek gehouden zodat een latere uitbreiding naar andere objecten mogelijk blijft.
+
 Hiermee kan een gedetecteerde gebeurtenis bijvoorbeeld worden weergegeven als:
 
 ```text
 12.4s – 16.8s
 
 ACTION:
-Remove component
-
-OBJECT:
-Battery
+Unscrewing
 
 TOOL:
 Screwdriver
@@ -390,16 +390,15 @@ De uiteindelijke pipeline moet niet alleen een computer vision-demo opleveren, m
 
 Gedetecteerde:
 
-* componenten;
-* acties;
 * tools;
+* menselijke acties;
 * volgorde;
 
 kunnen later worden vertaald naar relaties en processtappen.
 
 ### eDIM / reDIM
 
-Acties en eventueel hun duur kunnen worden gebruikt als input voor:
+Herkende acties en eventueel hun duur kunnen worden gebruikt als input voor:
 
 * identifying;
 * manipulation;
@@ -424,15 +423,15 @@ pick up screwdriver
 → position component
 ```
 
-kan later dienen als basis voor automatisch of semi-automatisch gegenereerde werkinstructies.
+kan later dienen als basis voor automatisch of semi-automatisch gegenereerde werkinstructies. De focus ligt hierbij op de **acties en het gebruikte gereedschap**, niet op het herkennen van alle losse onderdelen.
 
 ---
 
 # 13. Evaluatie
 
-De evaluatie wordt aangepast aan het type component.
+De evaluatie wordt per onderdeel afgestemd op de gekozen methode.
 
-### Objectdetectie
+### Tool recognition
 
 * Precision
 * Recall
@@ -446,7 +445,7 @@ De evaluatie wordt aangepast aan het type component.
 * tracking accuracy
 * eventueel standaard MOT-metrics indien relevant
 
-### Action recognition
+### Human action recognition
 
 Afhankelijk van de gekozen methode:
 
@@ -474,6 +473,8 @@ Wanneer de dataset te klein is voor betrouwbare statistische conclusies, wordt e
 
 # 14. Belangrijke uitgangspunten
 
+Focus van dit project: **tool recognition** en **human action recognition**. Andere herkenningsdoelen (generieke objectherkenning, connectoren) vallen buiten scope.
+
 De eerste versie hoeft niet direct het volledige systeem te bevatten.
 
 De ontwikkeling verloopt stapsgewijs:
@@ -485,24 +486,24 @@ Pretrained YOLO + MediaPipe
 Wat kunnen we zonder training?
 
 FASE 2
-Object tracking
+Tool tracking
         ↓
-Kunnen we objecten door de tijd volgen?
+Kunnen we gereedschappen door de tijd volgen?
 
 FASE 3
 Annotatie + dataset
         ↓
-Welke objecten en acties zijn relevant?
+Welke tools en acties zijn relevant?
 
 FASE 4
-YOLO fine-tuning
+Tool recognition
         ↓
-Kunnen we DUPLO-specifieke objecten herkennen?
+Kunnen we DUPLO-specifieke tools herkennen?
 
 FASE 5
-Temporal/action recognition
+Human action recognition
         ↓
-Kunnen we disassembly actions herkennen?
+Kunnen we menselijke disassembly actions herkennen?
 
 FASE 6
 DUPLO mapping
@@ -511,7 +512,7 @@ Kunnen we de resultaten koppelen aan
 eDIM / Disassembly Graph / tool taxonomy?
 ```
 
-Het project blijft daarmee een proof of concept en hoeft niet alle bovenstaande fases volledig uit te voeren wanneer de beschikbare data daarvoor onvoldoende is.
+Het project blijft daarmee een proof of concept en hoeft niet alle bovenstaande fases volledig uit te voeren wanneer de beschikbare data daarvoor onvoldoende is. Ook geldt: er wordt geen generiek disassemblymodel getraind; het zwaartepunt ligt op tool recognition en human action recognition, en de waarde zit in het experimenteel vaststellen van wat haalbaar is en waar de beperkingen liggen.
 
 ---
 
@@ -519,26 +520,26 @@ Het project blijft daarmee een proof of concept en hoeft niet alle bovenstaande 
 
 **YOLO26X**
 
-> WHAT is present?
+> WHICH tools are present?
 
 **ByteTrack / tracking**
 
-> WHICH detected object is the same object over time?
+> WHICH detected tool is the same tool over time?
 
 **MediaPipe Hands**
 
 > WHERE are the hands and how do they move?
 
-**Object history**
+**Tool history**
 
-> HOW do objects move over time?
+> HOW do tools move over time?
 
-**Action recognition**
+**Human action recognition**
 
-> WHAT ACTION happened?
+> WHAT human action happened?
 
 **DUPLO mapping**
 
 > HOW does that action translate into eDIM, Disassembly Graphs and work instructions?
 
-De code wordt modulair ontworpen zodat YOLO, tracker, MediaPipe en het latere action-recognitionmodel afzonderlijk vervangen en geëvalueerd kunnen worden.
+De code wordt modulair ontworpen zodat YOLO, tracker, MediaPipe en het latere human-action-recognitionmodel afzonderlijk vervangen en geëvalueerd kunnen worden.

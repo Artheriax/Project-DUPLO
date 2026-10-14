@@ -1,5 +1,7 @@
 # Project DUPLO
 
+Proof of concept voor het automatisch analyseren van DUPLO-disassemblyvideo's. De scope van het project is **tool recognition** (gereedschappen herkennen en volgen) en **human action recognition** (menselijke handelingen herkennen). Het finetunen van YOLO tot een generiek disassemblymodel is te moeilijk en te tijdrovend gebleken en valt buiten dit project; in plaats daarvan gebruiken we pretrained modellen voor tooldetectie en richten we ons eigen modelleerwerk op de actieherkenning. Zie [Documentation/Opdracht.md](Documentation/Opdracht.md) en [Documentation/PLAN.md](Documentation/PLAN.md) voor het volledige kader.
+
 ## Projectstructuur
 
 - `configs/` – instellingen per experiment (video, model, drempels, device)
@@ -7,7 +9,7 @@
 - `models/` – gedownloade modelgewichten: `yolo26x.pt` en `hand_landmarker.task` (niet in git)
 - `outputs/` – resultaten per video, per stap een eigen submap (`yolo/`, `handpose/`, `tracking/`) met CSV's, voorbeeldframes en debug-video
 - `src/duplo/` – gedeelde componenten: CLI, config, GPU-setup, video-inlezen, output, detectie en ByteTrack-tracking
-- `src/run_yolo_video.py` – YOLO-pipeline (objectdetectie)
+- `src/run_yolo_video.py` – YOLO-pipeline (detectie, in dit project gericht op gereedschappen)
 - `src/run_handpose.py` – MediaPipe-pipeline (handlandmarks)
 - `src/run_tracking.py` – YOLO + ByteTrack-pipeline (objecten volgen over frames)
 - `run_yolo_test.bat` / `run_handpose_test.bat` / `run_tracking_test.bat` – startscripts voor Windows
@@ -58,4 +60,3 @@ Zonder argument gebruiken de scripts de waarde van `device` in `configs\baseline
 ## Voortgang
 
 Tijdens het draaien wordt de voortgang direct getoond: in een console een balk die op één regel bijwerkt, en bij vastgelegde uitvoer (logbestand of IDE-paneel) voortgangsregels bij elke 10% of elke 5 seconden.
-
