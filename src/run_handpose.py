@@ -99,7 +99,8 @@ def main(cfg_path: str, device: str | None = None) -> None:
     fps = video_fps(cfg["video_path"])
     stride = cfg.get("frame_stride", 1)
     screenshot_every = cfg.get("screenshot_every", 150)
-    video = (DebugVideoWriter(out_dir / "handpose_debug.mp4", fps / stride)
+    video = (DebugVideoWriter(out_dir / "handpose_debug.mp4", fps / stride,
+                              encoder=cfg.get("video_encoder", "auto"))
              if cfg.get("save_handpose_video", True) else None)
     rows = []
     frames = VideoFrames(cfg["video_path"], stride=stride, desc="MediaPipe")
@@ -110,7 +111,8 @@ def main(cfg_path: str, device: str | None = None) -> None:
                 image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
                 timestamp_ms = int(frame_idx * 1000 / fps)
                 res = hands.detect_for_video(image, timestamp_ms)
-                if res.hand_landmarks:
+                has_hands = bool(res.hand_landmarks)
+                if has_hands:
                     for h_idx, landmarks in enumerate(res.hand_landmarks):
                         for p_idx, point in enumerate(landmarks):
                             rows.append({
@@ -124,7 +126,10 @@ def main(cfg_path: str, device: str | None = None) -> None:
                         save_screenshot(out_dir, "hand_frame", frame_idx,
                                         annotated)
                 if video is not None:
-                    video.write(draw_all_hands(frame, res.hand_landmarks))
+                    # Zonder handen geen kopie/tekenwerk: schrijf het frame
+                    # direct weg (zelfde beeld, minder CPU).
+                    video.write(draw_all_hands(frame, res.hand_landmarks)
+                                if has_hands else frame)
     finally:
         # Ook bij een onderbreking de debug-video netjes afsluiten.
         if video is not None:

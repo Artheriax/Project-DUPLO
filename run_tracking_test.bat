@@ -17,7 +17,8 @@ if not exist "%PYTHON%" (
 )
 
 echo [1/3] Python packages controleren...
-"%PYTHON%" -m pip install -r requirements.txt
+"%PYTHON%" -m pip install --upgrade pip
+"%PYTHON%" -m pip install -U -r requirements.txt
 if errorlevel 1 (
     echo ERROR: Een of meer packages konden niet worden geinstalleerd.
     exit /b 1

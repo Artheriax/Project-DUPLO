@@ -34,5 +34,11 @@ save_yolo_world_video: true
 save_yolo_seg_video: true
 save_grounding_dino_video: true
 save_sam3_video: true
+# Snelheid (detectie-neutraal: zelfde imgsz/drempels/gewichten, alleen snellere kernels/codering)
+yolo_half: true                            # FP16-inferentie op CUDA (Ultralytics half=True)
+yolo_fuse: true                            # Conv+BN fusie voor YOLO-modellen
+yolo_backend: "torch"                      # "torch" of "tensorrt" (opt-in .engine-export, valt terug op .pt)
+autocast_fp16: true                        # FP16-autocast voor Grounding DINO en SAM3 op CUDA
+video_encoder: "auto"                      # "auto" (NVENC indien aanwezig, anders x264), "nvenc", "x264" of "mp4v"
 comparison_target_fps: 15                        # doorvoer voor real-time: bronfps / frame_stride
 comparison_weights: {coverage: 0.4, presence: 0.3, speed: 0.3}  # weging in compare_models.py

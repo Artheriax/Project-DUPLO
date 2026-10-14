@@ -1,4 +1,4 @@
-ultralytics==8.4.174  # vastgepind: de tracking-integratie gebruikt interne BYTETracker-API's
+ultralytics
 lap
 mediapipe
 opencv-python
@@ -8,13 +8,13 @@ pyyaml
 tqdm
 imageio-ffmpeg
 # Modelvergelijking (toolrecognition): RF-DETR, Grounding DINO, YOLO-World en SAM3
-rfdetr==1.11.2
-transformers==5.19.0
-timm==1.0.30
-supervision==0.30.9
+rfdetr
+transformers
+timm
+supervision
 # SAM3: gewichten van facebook/sam3 vereisen een goedgekeurde Hugging
 # Face-toegangsaanvraag + 'hf auth login'; sam3 verlaagt numpy naar <2.4 en op
 # Windows is triton-windows nodig (sam3 importeert triton).
-sam3==0.1.4
-triton-windows==3.8.0.post29; sys_platform == "win32"
+sam3
+triton-windows
 # Voor GPU: de scripts installeren de CUDA-build van torch automatisch bij --device gpu

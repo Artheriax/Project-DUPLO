@@ -81,7 +81,11 @@ De gewichten staan in `configs/baseline.yaml` (`comparison_weights`) en zijn bew
 | yolo | YOLO26x (baseline) | 0/5 | 0 | 0 % | n.v.t. | 2,50 | 15,0 | 53,9 | 30,0 |
 | yolo_seg | YOLO26x-seg | 0/5 | 0 | 0 % | n.v.t. | 1,98 | 18,5 | 41,8 | 30,0 |
 
-Totale wandkloktijd per volledige video: RF-DETR 71 s, YOLO-World 78 s, YOLO 89 s, YOLO-seg 115 s, RF-DETR-seg 146 s, Grounding DINO 812 s (13,5 min) en SAM3 2422 s (40,4 min).
+Totale wandkloktijd per volledige video (5 min): RF-DETR 71 s, YOLO-World 78 s, YOLO 89 s, YOLO-seg 115 s, RF-DETR-seg 146 s, Grounding DINO 812 s (13,5 min) en SAM3 2422 s (40,4 min).
+
+#### Hardware
+
+Getest op: RTX 5080 (16 GB VRAM), Ryzen 9 9950X (16 cores, 32 threads, 4,5 GHz), 64GB DDR5-6000 RAM.
 
 ### 5.2 Detecties per gereedschapsklasse
 

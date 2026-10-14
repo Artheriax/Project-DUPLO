@@ -5,10 +5,13 @@ Gebruikt de pretrained COCO-gewichten van het ``rfdetr``-pakket
 """
 import time
 
+import cv2
+
 from duplo.benchmark import InferenceTimer, write_run_summary
 from duplo.cli import parse_args
 from duplo.config import load_config, resolve_device
-from duplo.gpu import ensure_cuda_torch
+from duplo.gpu import (ensure_cuda_torch, quiet_third_party_init,
+                   setup_cuda_optimizations)
 from duplo.output import prepare_output_dir, save_screenshot, write_rows_csv
 from duplo.video import VideoFrames, video_fps
 from duplo.video_writer import DebugVideoWriter
@@ -26,16 +29,20 @@ def build_model(cfg: dict, device: str):
         device="cuda" if device == "gpu" else "cpu")
 
 
-def annotate(frame, detections):
+def annotate(frame, detections, mask_annotator=None, box_annotator=None,
+               label_annotator=None):
     """Frame met maskers, bboxes en labels voor de debug-video."""
     import supervision as sv
 
     labels = [f"{name} {float(confidence):.2f}" for name, confidence in
               zip(detections.data["class_name"], detections.confidence)]
-    annotated = sv.MaskAnnotator().annotate(frame, detections)
-    annotated = sv.BoxAnnotator(thickness=2).annotate(annotated, detections)
-    return sv.LabelAnnotator(text_scale=0.5, text_thickness=1).annotate(
-        annotated, detections, labels)
+    mask_annotator = mask_annotator or sv.MaskAnnotator()
+    box_annotator = box_annotator or sv.BoxAnnotator(thickness=2)
+    label_annotator = (label_annotator
+                       or sv.LabelAnnotator(text_scale=0.5, text_thickness=1))
+    annotated = mask_annotator.annotate(frame, detections)
+    annotated = box_annotator.annotate(annotated, detections)
+    return label_annotator.annotate(annotated, detections, labels)
 
 
 def main(cfg_path: str, device: str | None = None) -> None:
@@ -45,29 +52,37 @@ def main(cfg_path: str, device: str | None = None) -> None:
     device = resolve_device(device, cfg)
     if device == "gpu":
         ensure_cuda_torch()
-    model_name, model = build_model(cfg, device)
-    if device == "gpu" and cfg.get("rfdetr_optimize", True):
-        # Gedocumenteerde real-time route van RF-DETR (FP16 + compile).
-        import torch
-        model.inference(dtype=torch.float16)
+    setup_cuda_optimizations(device)
+    with quiet_third_party_init():
+        model_name, model = build_model(cfg, device)
+        if device == "gpu" and cfg.get("rfdetr_optimize", True):
+            # Gedocumenteerde real-time route van RF-DETR (FP16 + compile).
+            import torch
+            model.inference(dtype=torch.float16)
     print(f"RF-DETR-seg ({model_name}) draait op {device.upper()}")
 
+    import supervision as sv
+
+    mask_annotator = sv.MaskAnnotator()
+    box_annotator = sv.BoxAnnotator(thickness=2)
+    label_annotator = sv.LabelAnnotator(text_scale=0.5, text_thickness=1)
     threshold = cfg["conf_threshold"]
     fps = video_fps(cfg["video_path"])
     stride = cfg.get("frame_stride", 1)
     screenshot_every = cfg.get("screenshot_every", 150)
     timer = InferenceTimer()
-    video = (DebugVideoWriter(out_dir / "rfdetr_seg_debug.mp4", fps / stride)
+    video = (DebugVideoWriter(out_dir / "rfdetr_seg_debug.mp4", fps / stride,
+                              encoder=cfg.get("video_encoder", "auto"))
              if cfg.get("save_rfdetr_seg_video", True) else None)
     rows = []
     frames = VideoFrames(cfg["video_path"], stride=stride, desc="RF-DETR-seg")
     started = time.perf_counter()
     try:
         for frame_idx, frame in frames:
-            # RF-DETR verwacht RGB-beelden; OpenCV levert BGR.
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             with timer:
                 detections = model.predict(
-                    frame[:, :, ::-1], threshold=threshold,
+                    rgb_frame, threshold=threshold,
                     include_source_image=False)
             class_names = detections.data["class_name"]
             for index, (box, confidence) in enumerate(
@@ -82,11 +97,17 @@ def main(cfg_path: str, device: str | None = None) -> None:
                     "bbox_w": x2 - x1, "bbox_h": y2 - y1,
                     "mask_area": int(detections.mask[index].sum()),
                 })
-            annotated = annotate(frame, detections)
-            if video is not None:
-                video.write(annotated)
-            if screenshot_every > 0 and frame_idx % screenshot_every == 0:
-                save_screenshot(out_dir, "rfdetr_seg_frame", frame_idx, annotated)
+            need_video = video is not None
+            need_shot = (screenshot_every > 0
+                         and frame_idx % screenshot_every == 0)
+            if need_video or need_shot:
+                annotated = annotate(frame, detections, mask_annotator,
+                                     box_annotator, label_annotator)
+                if need_video:
+                    video.write(annotated)
+                if need_shot:
+                    save_screenshot(out_dir, "rfdetr_seg_frame", frame_idx,
+                                    annotated)
     finally:
         # Ook bij een onderbreking de debug-video netjes afsluiten.
         if video is not None:

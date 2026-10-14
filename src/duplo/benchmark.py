@@ -42,11 +42,14 @@ def write_run_summary(out_dir: Path, name: str, *, model: str, device: str,
                       video: str, frames_read: int, frames_processed: int,
                       elapsed_s: float, rows: list[dict],
                       timer: InferenceTimer, csv_file: str,
+                      class_field: str = "klasse",
                       extra: dict | None = None) -> dict:
     """Schrijf de samenvatting van deze modelrun als JSON naast de CSV.
 
     ``name`` is de stapsnaam (bijvoorbeeld ``rfdetr``) en ``model`` de
     gebruikte modelnaam of checkpoint; beide komen in de vergelijking terug.
+    ``class_field`` is de kolom met de klassenaam: detectiestappen gebruiken
+    ``klasse``, trackingstappen ``class_name``.
     """
     times = timer.times_ms
     summary = {
@@ -67,7 +70,7 @@ def write_run_summary(out_dir: Path, name: str, *, model: str, device: str,
         "detections": len(rows),
         "detections_per_frame": (round(len(rows) / frames_processed, 3)
                                  if frames_processed else 0.0),
-        "klassen": sorted({str(row["klasse"]) for row in rows}),
+        "klassen": sorted({str(row[class_field]) for row in rows}),
         "csv": csv_file,
     }
     if extra:
