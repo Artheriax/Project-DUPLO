@@ -376,3 +376,131 @@ class Sam3Detector:
             if conf is not None:
                 self.processor.set_confidence_threshold(self.conf_threshold)
         return detections
+
+
+class Sam31Detector:
+    """Wrapper rond SAM 3.1 (Object Multiplex-checkpoint) via Ultralytics.
+
+    SAM 3.1 (``facebook/sam3.1``, ``sam3.1_multiplex.pt``) wordt via de
+    Ultralytics-beeldpredictor ``SAM3SemanticPredictor`` met een tekstprompt
+    per toolklasse gedraaid (open-vocabulary, zonder finetuning). De rest van
+    de pipeline werkt met Detection-objecten, inclusief het masker.
+
+    De gewichten staan achter een Hugging Face-toegangsaanvraag: vraag toegang
+    aan op https://huggingface.co/facebook/sam3.1 en log daarna in met
+    ``huggingface-cli login`` (of ``hf auth login``). Daarna downloadt
+    Ultralytics ``sam3.1_multiplex.pt`` automatisch, of gebruik een lokaal
+    bestand via ``sam31_model`` in de config (standaard
+    ``models/sam3.1_multiplex.pt``). Object Multiplex-videotracking wordt door
+    Ultralytics nog niet ondersteund; deze detector doet per-frame
+    beeldinferentie (de SAM 3.1-beelddetector in het multiplex-checkpoint).
+    Voor het native videomodel, zie https://github.com/facebookresearch/sam3
+    (``sam3.1_video_predictor_example.ipynb``).
+    """
+
+    def __init__(self, cfg: dict, device: str = "cpu") -> None:
+        try:
+            from ultralytics.models.sam import SAM3SemanticPredictor
+        except ImportError as exc:
+            raise SystemExit(
+                "Ultralytics met SAM3-ondersteuning is niet beschikbaar. "
+                f"Installeer 'ultralytics -U'. Details: {exc}"
+            ) from exc
+        from duplo.gpu import setup_cuda_optimizations
+
+        setup_cuda_optimizations(device)
+        self.model_id = cfg.get("sam31_model", "models/sam3.1_multiplex.pt")
+        self.device = "cuda" if device == "gpu" else "cpu"
+        self.conf_threshold = cfg.get("conf_threshold", 0.25)
+        self.prompts = [str(prompt) for prompt in
+                        (cfg.get("sam31_prompts") or cfg["tool_classes"])]
+        self.class_names = {index: name
+                            for index, name in enumerate(self.prompts)}
+        use_fp16 = (bool(cfg.get("autocast_fp16", True))
+                    and self.device == "cuda")
+        overrides: dict = {
+            "conf": self.conf_threshold,
+            "task": "segment",
+            "mode": "predict",
+            "model": self.model_id,
+            "device": self.device,
+            "verbose": False,
+            "save": False,
+        }
+        if use_fp16:
+            # FP16-inferentie op CUDA (Ultralytics quantize=16).
+            overrides["quantize"] = 16
+        # SAM 3.1 (ViT) heeft max stride 14. Ultralytics zou de standaard 640
+        # zelf naar 644 afronden met een waarschuwing; zet daarom meteen een
+        # veelvoud van 14 als standaard.
+        overrides["imgsz"] = cfg.get("sam31_imgsz") or 644
+        try:
+            self.predictor = SAM3SemanticPredictor(overrides=overrides)
+            # Vroeg initialiseren voor een duidelijke fout bij gated gewichten.
+            self.predictor.setup_model()
+        except Exception as exc:
+            raise SystemExit(
+                "SAM 3.1 kon niet worden geladen. De checkpoints van "
+                "facebook/sam3.1 zijn alleen na een goedgekeurde Hugging "
+                "Face-toegangsaanvraag te downloaden; vraag toegang aan op "
+                "https://huggingface.co/facebook/sam3.1, log in met "
+                "'huggingface-cli login' (of 'hf auth login') of zet een "
+                "lokaal 'sam31_model' in de config. Bij "
+                "\"TypeError: 'SimpleTokenizer' object is not callable\": "
+                "vervang het 'clip'-pakket door "
+                "'pip install git+https://github.com/ultralytics/CLIP.git'. "
+                f"Details: {exc}"
+            ) from exc
+
+    def detect(self, frame: np.ndarray,
+               conf: float | None = None) -> list[Detection]:
+        """Detecteer gereedschappen; conf overschrijft tijdelijk de drempel."""
+        target_conf = self.conf_threshold if conf is None else conf
+        previous_conf = self.predictor.args.conf
+        self.predictor.args.conf = target_conf
+        try:
+            # BGR-frame (OpenCV) mag direct als source; de tekstprompts gaan
+            # als kwargs mee naar SAM3SemanticPredictor.inference().
+            results = self.predictor(source=frame, text=self.prompts)
+        finally:
+            self.predictor.args.conf = previous_conf
+        if not results:
+            return []
+        result = results[0]
+        if result.boxes is None or len(result.boxes) == 0:
+            return []
+        xyxy = result.boxes.xyxy.cpu().numpy()
+        scores = result.boxes.conf.cpu().numpy()
+        class_ids = result.boxes.cls.cpu().numpy().astype(int)
+        names = getattr(result, "names", None)
+        masks = None
+        if result.masks is not None:
+            masks = result.masks.data.cpu().numpy()
+        detections = []
+        for index in range(len(xyxy)):
+            class_id = int(class_ids[index])
+            if isinstance(names, dict):
+                class_name = str(names.get(class_id, self._prompt_name(class_id)))
+            elif isinstance(names, (list, tuple)) and 0 <= class_id < len(names):
+                class_name = str(names[class_id])
+            else:
+                class_name = self._prompt_name(class_id)
+            mask = None
+            if masks is not None and index < len(masks):
+                array = np.asarray(masks[index])
+                mask = array.reshape(array.shape[-2], array.shape[-1]) > 0
+            x1, y1, x2, y2 = (float(value) for value in xyxy[index])
+            detections.append(Detection(
+                bbox=(x1, y1, x2, y2),
+                confidence=float(scores[index]),
+                class_id=class_id,
+                class_name=class_name,
+                mask=mask,
+            ))
+        return detections
+
+    def _prompt_name(self, class_id: int) -> str:
+        """Promptklasse bij een index; valt terug op de index als string."""
+        if 0 <= class_id < len(self.prompts):
+            return self.prompts[class_id]
+        return str(class_id)

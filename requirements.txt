@@ -7,7 +7,7 @@ numpy
 pyyaml
 tqdm
 imageio-ffmpeg
-# Modelvergelijking (toolrecognition): RF-DETR, Grounding DINO, YOLO-World en SAM3
+# Modelvergelijking (toolrecognition): RF-DETR, Grounding DINO, YOLO-World, SAM3 en SAM 3.1
 rfdetr
 transformers
 timm
@@ -15,6 +15,14 @@ supervision
 # SAM3: gewichten van facebook/sam3 vereisen een goedgekeurde Hugging
 # Face-toegangsaanvraag + 'hf auth login'; sam3 verlaagt numpy naar <2.4 en op
 # Windows is triton-windows nodig (sam3 importeert triton).
-sam3
+# Vastgezet op de PyPI-release: de git-versie van facebookresearch/sam3 pint
+# numpy<2 en numpy 1.x heeft geen wheels voor Python 3.13, dus installeren
+# vanaf git eindigt in een mislukte bronbuild (npy_cdouble/C99-complexfout).
+sam3==0.1.4
 triton-windows
+clip @git+https://github.com/ultralytics/CLIP.git
+# SAM 3.1 (Object Multiplex, sam3.1_multiplex.pt) loopt via ultralytics
+# (SAM3SemanticPredictor) en heeft geen extra package nodig; de gewichten van
+# facebook/sam3.1 vereisen wel een goedgekeurde Hugging Face-toegangsaanvraag
+# + 'huggingface-cli login' (of 'hf auth login').
 # Voor GPU: de scripts installeren de CUDA-build van torch automatisch bij --device gpu

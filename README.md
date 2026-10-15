@@ -8,7 +8,7 @@ Proof of concept voor het automatisch analyseren van DUPLO-disassemblyvideo's. D
 - `data/` – invoervideo's (niet in git)
 - `Documentation/` – [Opdracht.md](Documentation/Opdracht.md) (opdrachtomschrijving), [PLAN.md](Documentation/PLAN.md) (technisch plan) en [Modelvergelijking.md](Documentation/Modelvergelijking.md) (testrapport van de modelvergelijking)
 - `models/` – gedownloade modelgewichten: `yolo26x.pt` en `hand_landmarker.task` (niet in git)
-- `outputs/` – resultaten per video, per stap een eigen submap (`yolo/`, `handpose/`, `tracking/`, `rfdetr/`, `rfdetr_seg/`, `grounding_dino/`, `yolo_world/`, `yolo_seg/`, `sam3/` en `comparison/`) met CSV's, voorbeeldframes en debug-video
+- `outputs/` – resultaten per video, per stap een eigen submap (`yolo/`, `handpose/`, `tracking/`, `rfdetr/`, `rfdetr_seg/`, `grounding_dino/`, `yolo_world/`, `yolo_seg/`, `sam3/`, `sam31/` en `comparison/`) met CSV's, voorbeeldframes en debug-video
 - `src/duplo/` – gedeelde componenten: CLI, config, GPU-setup, video-inlezen, output, detectie, ByteTrack-tracking en de benchmark-samenvatting per modelstap
 - `src/run_yolo_video.py` – YOLO-pipeline (detectie, in dit project gericht op gereedschappen)
 - `src/run_handpose.py` – MediaPipe-pipeline (handlandmarks)
@@ -19,8 +19,9 @@ Proof of concept voor het automatisch analyseren van DUPLO-disassemblyvideo's. D
 - `src/run_yolo_world_video.py` – YOLO-World (open-vocabulary, tekstprompt met toolklassen)
 - `src/run_yolo_seg_video.py` – YOLO26-segmentatie (maskers)
 - `src/run_sam3_video.py` – SAM3-segmentatie (open-vocabulary, vereist Hugging Face-toegang)
+- `src/run_sam31_video.py` – SAM 3.1-segmentatie via Ultralytics (open-vocabulary, `sam3.1_multiplex.pt`, vereist Hugging Face-toegang)
 - `src/compare_models.py` – vergelijkt de modeltesten op tooldetectie en snelheid
-- `run_yolo_test.bat` / `run_handpose_test.bat` / `run_tracking_test.bat` / `run_rfdetr_test.bat` / `run_rfdetr_seg_test.bat` / `run_grounding_dino_test.bat` / `run_yolo_world_test.bat` / `run_yolo_seg_test.bat` / `run_sam3_test.bat` / `run_compare_models.bat` – startscripts voor Windows
+- `run_yolo_test.bat` / `run_handpose_test.bat` / `run_tracking_test.bat` / `run_rfdetr_test.bat` / `run_rfdetr_seg_test.bat` / `run_grounding_dino_test.bat` / `run_yolo_world_test.bat` / `run_yolo_seg_test.bat` / `run_sam3_test.bat` / `run_sam31_test.bat` / `run_compare_models.bat` – startscripts voor Windows
 
 ## Eerste YOLO-test
 
@@ -41,6 +42,7 @@ Voor de toolrecognition zijn naast YOLO zes alternatieven toegevoegd met dezelfd
 | `run_yolo_seg_test.bat` | YOLO26x-seg | segmentatie | `yolo_seg/` |
 | `run_rfdetr_seg_test.bat` | RF-DETR Seg 2XLarge | segmentatie | `rfdetr_seg/` |
 | `run_sam3_test.bat` | SAM3 | segmentatie, open-vocabulary | `sam3/` |
+| `run_sam31_test.bat` | SAM 3.1 (Object Multiplex-checkpoint) | segmentatie, open-vocabulary | `sam31/` |
 
 De doelgereedschappen staan als `tool_classes` in `configs/baseline.yaml` (schroevendraaier, steeksleutel, tang, snijder, hamer). De open-vocabulary modellen krijgen die lijst als tekstprompt; de andere modellen gebruiken hun eigen COCO-klassen en kunnen dus alleen gereedschappen vinden die in COCO zitten. De segmentatiestappen loggen ook `mask_area` (maskeroppervlak in pixels).
 
@@ -48,7 +50,9 @@ De nieuwe stappen gebruiken dezelfde kolomopzet als de YOLO-test (`video`, `fram
 
 **SAM3:** de gewichten van `facebook/sam3` staan achter een Hugging Face-toegangsaanvraag: vraag toegang aan op https://huggingface.co/facebook/sam3 en log daarna in met `hf auth login`. Op Windows is daarnaast `triton-windows` nodig (sam3 importeert `triton`; het officiële pakket heeft geen Windows-wheels) — beide packages staan in `requirements.txt`. Het pip-pakket mist het BPE-vocabulaire voor de tekstencoder; [run_sam3_video.py](src/run_sam3_video.py) haalt dat eenmalig uit de sam3-repo en zet het in `models/`.
 
-De nieuwste SAM 3.1-checkpoints (Object Multiplex) verbeteren het *videomodel* (`sam3.1_multiplex.pt`); de beeldinferentie in deze test gebruikt in de nieuwste code dezelfde `sam3.pt`, dus de vergelijking draait met de actuele SAM3-gewichten. De repositoryversie van de code pint `numpy<2` en vraagt `pkg_resources` (`setuptools<81`); gebruik daarvoor een aparte venv.
+**SAM 3.1:** de gewichten van `facebook/sam3.1` (`sam3.1_multiplex.pt`, Object Multiplex-checkpoint) staan achter een Hugging Face-toegangsaanvraag: vraag toegang aan op https://huggingface.co/facebook/sam3.1 en log daarna in met `huggingface-cli login` (of `hf auth login`). Daarna downloadt Ultralytics het checkpoint automatisch bij `run_sam31_test.bat`, of zet een lokaal bestand via `sam31_model` in `configs/baseline.yaml` (standaard `models/sam3.1_multiplex.pt`, niet in git — handmatig downloaden mag ook). De test gebruikt Ultralytics `SAM3SemanticPredictor` met de `tool_classes` als tekstprompt (per-frame beeldinferentie met maskers); Object Multiplex-videotracking wordt door Ultralytics nog niet ondersteund. Voor het native videomodel (gezamenlijk multi-object tracken met gedeeld geheugen, ~7x sneller bij veel objecten) is de originele repo https://github.com/facebookresearch/sam3 nodig (Python 3.12+, CUDA 12.6+, `sam3.1_video_predictor_example.ipynb`); zie ook `RELEASE_SAM3p1.md` daar. Bij `TypeError: 'SimpleTokenizer' object is not callable` is het verkeerde `clip`-pakket geïnstalleerd: draai dan `pip uninstall clip -y` en `pip install git+https://github.com/ultralytics/CLIP.git`.
+
+De SAM 3.1-checkpoints (Object Multiplex, `sam3.1_multiplex.pt`) verbeteren volgens Meta vooral het *videomodel* (~7x sneller bij veel objecten); Ultralytics laadt hetzelfde checkpoint ook voor beeldinferentie, dus `run_sam31_test.bat` vergelijkt de actuele SAM 3.1-beelddetector met de SAM3-test (`sam3.pt`). De repositoryversie van de SAM3-code pint `numpy<2` en vraagt `pkg_resources` (`setuptools<81`); `requirements.txt` gebruikt daarom bewust de PyPI-release (`sam3==0.1.4`, werkt met numpy 2.x op Python 3.13) en niet de git-versie — gebruik voor die git-versie een aparte venv.
 
 ### Vergelijken
 
@@ -97,6 +101,7 @@ run_grounding_dino_test.bat --device gpu
 run_yolo_world_test.bat --device gpu
 run_yolo_seg_test.bat --device gpu
 run_sam3_test.bat --device gpu
+run_sam31_test.bat --device gpu
 ```
 
 Of direct via Python:

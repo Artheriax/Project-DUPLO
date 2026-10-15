@@ -28,6 +28,11 @@ grounding_dino_model: "IDEA-Research/grounding-dino-base"
 grounding_dino_text_threshold: 0.25              # drempel voor de promptwoorden in de tekst
 # grounding_dino_prompt: "screwdriver. wrench. ..."  # optioneel: eigen tekstprompt
 # sam3_checkpoint: "models/sam3.pt"              # optioneel: lokaal checkpoint (anders facebook/sam3)
+sam31_model: "models/sam3.1_multiplex.pt"      # SAM 3.1 Object Multiplex via Ultralytics (gated: facebook/sam3.1; handmatig gedownload)
+# sam31_prompts: ["screwdriver", "wrench"]      # optioneel: eigen tekstprompts (anders tool_classes)
+# sam31_imgsz: 644                             # optioneel: vierkante inputmaat voor SAM 3.1; moet een veelvoud van 14 zijn (max stride), standaard 644
+save_sam31_video: true                         # debug-video voor SAM 3.1 (beeldinferentie)
+save_sam31_tracking_video: true                # debug-video voor SAM 3.1 + ByteTrack
 save_rfdetr_video: true                          # debug-video per modelstap
 save_rfdetr_seg_video: true
 save_yolo_world_video: true
