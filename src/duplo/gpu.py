@@ -14,14 +14,33 @@ def cuda_available() -> bool:
     return probe.returncode == 0 and probe.stdout.strip() == "True"
 
 
-def ensure_cuda_torch() -> None:
-    """Installeert de CUDA-build van torch als die nog niet aanwezig is.
+def to_cuda_device(device: str) -> str:
+    """Map `cpu/gpu` (config/CLI) naar `cpu/cuda` (torch/ultralytics)."""
+    return "cuda" if device == "gpu" else "cpu"
 
-    Draait in een subprocess zodat een reeds geladen CPU-build het vervangen
-    van de DLL's niet blokkeert; importeer torch/ultralytics pas hierna.
+
+def ensure_cuda_torch(auto_install: bool = False) -> None:
+    """Controleer CUDA-torch; installeer alleen met expliciete opt-in.
+
+    Zonder `auto_install` volgt een duidelijke fout met het installatie-
+    commando i.p.v. een ~2GB pip-install mid-run. Met
+    `auto_install=True` (opt-in via `auto_install_torch: true` in de config)
+    blijft het oude gedrag behouden.
+
+    Draait installatie in een subprocess zodat een reeds geladen CPU-build
+    het vervangen van de DLL's niet blokkeert; importeer torch/ultralytics
+    pas hierna.
     """
     if cuda_available():
         return
+    if not auto_install:
+        raise SystemExit(
+            "GPU gevraagd, maar CUDA-torch is niet beschikbaar. "
+            "Installeer handmatig met: "
+            f'pip install -U torch torchvision --index-url {CUDA_TORCH_INDEX} '
+            "of zet 'auto_install_torch: true' in de config voor automatische "
+            "installatie (download ~2 GB, kan enkele minuten duren)."
+        )
     print("CUDA-torch niet gevonden; CUDA-build van torch wordt geinstalleerd "
           "(kan enkele minuten duren)...")
     result = subprocess.run([

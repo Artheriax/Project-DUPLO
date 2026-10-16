@@ -31,32 +31,86 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", default="configs/baseline.yaml")
     parser.add_argument("--output",
                         help="map voor het rapport; standaard <output_dir>/comparison")
+    # Bat-level flag (run_common.bat): zie duplo.cli.parse_args.
+    parser.add_argument("--upgrade", nargs="?", const=True, default=None,
+                        help=argparse.SUPPRESS)
     return parser.parse_args()
 
 
+TRACKING_SUFFIX = "_tracking_history.csv"
+HANDPOSE_CSV = "hand_landmarks.csv"
+
+
 def find_runs(output_dir: Path) -> list[Path]:
-    """Alle resultaten-CSV's van de modeltesten, met summary ernaast."""
+    """Alle detectie-CSV's van de modeltesten, met summary ernaast.
+
+    Tracking (`*_tracking_history.csv`) en handpose (`hand_landmarks.csv`)
+    worden apart gerapporteerd en niet meegewogen in de detectie-score.
+    """
     return sorted(output_dir.glob(f"*/*{CSV_SUFFIX}"))
 
 
+def find_tracking_runs(output_dir: Path) -> list[Path]:
+    """Alle ByteTrack-CSV's (`*_history.csv`, bv. `tracking_history.csv`)."""
+    seen: dict[str, Path] = {}
+    for pattern in ("*/*_history.csv", f"*/*{TRACKING_SUFFIX}"):
+        for path in sorted(output_dir.glob(pattern)):
+            seen[str(path)] = path
+    return sorted(seen.values())
+
+
 def load_summary(csv_path: Path) -> dict:
-    summary_path = csv_path.with_name(
-        csv_path.name.replace(CSV_SUFFIX, "_summary.json"))
-    if not summary_path.exists():
-        return {}
-    return json.loads(summary_path.read_text(encoding="utf-8"))
+    name = csv_path.name
+    candidates: list[Path] = []
+    if name.endswith(CSV_SUFFIX):
+        candidates.append(csv_path.with_name(
+            name[: -len(CSV_SUFFIX)] + "_summary.json"))
+    if name.endswith(TRACKING_SUFFIX):
+        candidates.append(csv_path.with_name(
+            name[: -len(TRACKING_SUFFIX)] + "_summary.json"))
+    if name.endswith("_history.csv"):
+        candidates.append(csv_path.with_name(
+            name[: -len("_history.csv")] + "_summary.json"))
+    # Fallback: enige *_summary.json in dezelfde map (bv. handpose).
+    candidates.extend(sorted(csv_path.parent.glob("*_summary.json")))
+    for summary_path in candidates:
+        if summary_path.exists():
+            return json.loads(summary_path.read_text(encoding="utf-8"))
+    return {}
+
+
+def _class_series(data: pd.DataFrame) -> pd.Series:
+    """Klasse-kolom ongeacht schema (`klasse` of `class_name`)."""
+    col = "klasse" if "klasse" in data.columns else (
+        "class_name" if "class_name" in data.columns else None)
+    if col is None:
+        return pd.Series([], dtype=str)
+    return data[col].astype(str).str.strip().str.lower()
+
+
+def _frame_series(data: pd.DataFrame) -> pd.Series:
+    """Frame-kolom ongeacht schema (`frame` of `frame_number`)."""
+    col = "frame" if "frame" in data.columns else (
+        "frame_number" if "frame_number" in data.columns else None)
+    if col is None:
+        return pd.Series([], dtype=int)
+    return data[col]
 
 
 def summarize_run(csv_path: Path, tool_classes: list[str]) -> dict:
     """Bereken de vergelijkingscijfers van één modeltest."""
     data = pd.read_csv(csv_path)
     summary = load_summary(csv_path)
-    classes = data["klasse"].astype(str).str.strip().str.lower()
+    classes = _class_series(data)
+    frames = _frame_series(data)
     tool_rows = data[classes.isin(tool_classes)]
     found = sorted(set(classes[classes.isin(tool_classes)]))
     frames_processed = int(summary.get("frames_processed") or
-                           data["frame"].nunique())
-    tool_frames = int(tool_rows["frame"].nunique())
+                           (frames.nunique() if len(frames) else 0))
+    frame_col = "frame" if "frame" in data.columns else (
+        "frame_number" if "frame_number" in data.columns else None)
+    tool_frames = (int(tool_rows[frame_col].nunique())
+                   if (frame_col is not None and len(tool_rows)) else 0)
     run = {
         "stap": csv_path.parent.name,
         "model": summary.get("model", "onbekend (geen summary gevonden)"),
@@ -103,10 +157,36 @@ def tool_matrix(csv_paths: list[Path], tool_classes: list[str]) -> pd.DataFrame:
     columns = {}
     for csv_path in csv_paths:
         data = pd.read_csv(csv_path)
-        classes = data["klasse"].astype(str).str.strip().str.lower()
+        classes = _class_series(data)
         columns[csv_path.parent.name] = classes.value_counts()
     matrix = pd.DataFrame(columns).reindex(tool_classes).fillna(0).astype(int)
     return matrix
+
+
+def summarize_tracking(csv_path: Path) -> dict:
+    """Beknopte tracking-statistieken (geen detectie-score)."""
+    data = pd.read_csv(csv_path)
+    summary = load_summary(csv_path)
+    frame_col = "frame_number" if "frame_number" in data.columns else (
+        "frame" if "frame" in data.columns else None)
+    frames = int(summary.get("frames_processed") or
+                 (data[frame_col].nunique() if frame_col else 0))
+    tracks = int(data["track_id"].nunique()) if "track_id" in data else 0
+    statuses = (data["status"].value_counts().to_dict()
+                if "status" in data else {})
+    return {
+        "stap": csv_path.parent.name,
+        "model": summary.get("model", "onbekend (geen summary gevonden)"),
+        "frames_processed": frames,
+        "tracks": tracks,
+        "rows": int(len(data)),
+        "rows_per_frame": round(len(data) / frames, 3) if frames else 0.0,
+        "status_confirmed": int(statuses.get("confirmed", 0)),
+        "status_tentative": int(statuses.get("tentative", 0)),
+        "status_occluded": int(statuses.get("occluded", 0)),
+        "inference_ms_median": summary.get("inference_ms_median"),
+        "pipeline_fps": summary.get("pipeline_fps"),
+    }
 
 
 def markdown_table(header: list[str], rows: list[list[str]]) -> str:
@@ -118,7 +198,8 @@ def markdown_table(header: list[str], rows: list[list[str]]) -> str:
 
 
 def build_report(runs: list[dict], matrix: pd.DataFrame, cfg: dict,
-                 weights: dict, target_fps: float) -> str:
+                 weights: dict, target_fps: float,
+                 tracking_runs: list[dict] | None = None) -> str:
     header = ["Model", "Modelnaam", "Toolklassen (gevonden/doel)",
               "Tool-detecties", "Tool-frames", "Gem. conf.", "Det./frame",
               "Inferentie (ms)", "Doorvoer (fps)", "Score"]
@@ -141,7 +222,7 @@ def build_report(runs: list[dict], matrix: pd.DataFrame, cfg: dict,
     matrix_rows = [[tool, *[int(matrix.loc[tool, column]) for column in matrix.columns]]
                    for tool in matrix.index]
     top_rows = [[run["stap"], run["top_classes"]] for run in runs]
-    return "\n".join([
+    parts = [
         "# Modelvergelijking toolrecognition",
         "",
         f"Video: `{cfg['video_path']}` · frame_stride "
@@ -164,6 +245,30 @@ def build_report(runs: list[dict], matrix: pd.DataFrame, cfg: dict,
         "",
         markdown_table(["Model", "Top-3 klassen"], top_rows),
         "",
+    ]
+    if tracking_runs:
+        track_header = ["Model", "Modelnaam", "Tracks", "Rijen/frame",
+                        "Confirmed", "Tentative", "Occluded",
+                        "Inferentie (ms)", "Doorvoer (fps)"]
+        track_rows = [[run["stap"], run["model"], run["tracks"],
+                       f"{run['rows_per_frame']:.2f}",
+                       run["status_confirmed"], run["status_tentative"],
+                       run["status_occluded"],
+                       "n.v.t." if run["inference_ms_median"] is None
+                       else f"{run['inference_ms_median']:.1f}",
+                       "n.v.t." if run["pipeline_fps"] is None
+                       else f"{run['pipeline_fps']:.1f}"]
+                      for run in tracking_runs]
+        parts.extend([
+            "## Tracking (ByteTrack, apart van detectie-score)",
+            "",
+            markdown_table(track_header, track_rows),
+            "",
+            "Tracking wordt niet meegewogen in de score hierboven; "
+            "`confirmed/tentative/occluded` tellen rijen per status.",
+            "",
+        ])
+    parts.extend([
         "## Kanttekeningen",
         "",
         "* Er is geen geannoteerde ground truth, dus accuracy (precision/recall)",
@@ -175,12 +280,16 @@ def build_report(runs: list[dict], matrix: pd.DataFrame, cfg: dict,
         "  80 COCO-klassen en hebben daar maar enkele gereedschappen in.",
         "* Confidence is niet tussen modellen te vergelijken: elke familie",
         "  kalibreert scores anders.",
+        "* `mask_area` is een pixel-count op frame-resolutie (YOLO-seg via",
+        "  gerasteriseerd polygoon, RF-DETR-seg/SAM via geresized masker);",
+        "  vergelijk alleen binnen segmentatie onderling.",
         "* Klassen met enkele detecties kunnen toevallige treffers of false",
         "  positives zijn; weeg de aantallen per klasse mee in het oordeel.",
         "* Bekijk de debug-video's en voorbeeldframes per stap voor een",
         "  kwalitatief oordeel naast deze cijfers.",
         "",
     ])
+    return "\n".join(parts)
 
 
 def main(cfg_path: str, output: str | None = None) -> None:
@@ -197,13 +306,18 @@ def main(cfg_path: str, output: str | None = None) -> None:
     target_fps = float(cfg.get("comparison_target_fps", 15))
     runs = [summarize_run(csv_path, tool_classes) for csv_path in csv_paths]
     add_scores(runs, weights, target_fps)
+    tracking_paths = find_tracking_runs(output_dir)
+    tracking_runs = [summarize_tracking(csv_path) for csv_path in tracking_paths]
 
     report_dir = Path(output) if output else output_dir / "comparison"
     report_dir.mkdir(parents=True, exist_ok=True)
     table = pd.DataFrame(runs)
     table.to_csv(report_dir / "model_comparison.csv", index=False)
+    if tracking_runs:
+        pd.DataFrame(tracking_runs).to_csv(
+            report_dir / "tracking_comparison.csv", index=False)
     report = build_report(runs, tool_matrix(csv_paths, tool_classes), cfg,
-                          weights, target_fps)
+                          weights, target_fps, tracking_runs)
     (report_dir / "model_comparison.md").write_text(report, encoding="utf-8")
     print(report)
     print(f"Rapport geschreven naar {report_dir}")

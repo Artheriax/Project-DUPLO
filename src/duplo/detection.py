@@ -104,21 +104,43 @@ class YoloDetector:
 
     def detect(self, frame: np.ndarray,
                conf: float | None = None) -> list[Detection]:
-        """Detecteer objecten; conf overschrijft tijdelijk de config-drempel."""
+        """Detecteer objecten; conf overschrijft tijdelijk de config-drempel.
+
+        Neemt segmentatiemaskers mee als het model die levert (YOLO-seg),
+        geresized naar frame-resolutie voor vergelijkbare `mask_area`.
+        """
         result = self.model.predict(
             frame, conf=self.conf_threshold if conf is None else conf,
             device=self.device, verbose=False,
             quantize=16 if self.use_half else None, augment=False,
         )[0]
+        masks = None
+        if getattr(result, "masks", None) is not None:
+            try:
+                masks = result.masks.data.cpu().numpy()
+            except (AttributeError, RuntimeError):
+                masks = None
+        frame_h, frame_w = frame.shape[:2]
         detections = []
-        for box in result.boxes:
+        boxes = result.boxes
+        for idx, box in enumerate(boxes):
             x1, y1, x2, y2 = (float(value) for value in box.xyxy[0])
             class_id = int(box.cls)
+            mask = None
+            if masks is not None and idx < len(masks):
+                array = np.asarray(masks[idx])
+                array = array.reshape(array.shape[-2], array.shape[-1])
+                if array.shape != (frame_h, frame_w):
+                    array = cv2.resize(array.astype(np.uint8),
+                                       (frame_w, frame_h),
+                                       interpolation=cv2.INTER_NEAREST)
+                mask = array > 0
             detections.append(Detection(
                 bbox=(x1, y1, x2, y2),
                 confidence=float(box.conf),
                 class_id=class_id,
-                class_name=self.class_names[class_id],
+                class_name=self.class_names.get(class_id, str(class_id)),
+                mask=mask,
             ))
         return detections
 
@@ -128,16 +150,19 @@ def normalize_label(label: str, tool_classes: list[str]) -> str:
 
     Grounding DINO levert soms samengestelde labels ("screwdriver pliers")
     wanneer meerdere prompts op hetzelfde object passen; in de CSV staat dan
-    de eerstgenoemde gereedschapsklasse. Soms bestaat een label uit een
-    deelwoord ("screw", "##driver", "pl"); die woorden worden aan de
-    gereedschapsklasse gekoppeld waar ze het begin of het eind van zijn.
+    de langste (meest specifieke) gereedschapsklasse, bij gelijke lengte de
+    eerstgenoemde. Soms bestaat een label uit een deelwoord ("screw",
+    "##driver", "pl"); die woorden worden aan de gereedschapsklasse
+    gekoppeld waar ze het begin of het eind van zijn.
     """
     text = str(label).strip().lower()
     if text in tool_classes:
         return text
-    contained = [(text.find(tool), tool) for tool in tool_classes if tool in text]
+    contained = [(tool, text.find(tool)) for tool in tool_classes if tool in text]
     if contained:
-        return min(contained)[1]
+        # Langste match wint (specifieker); bij gelijke lengte vroegste positie.
+        best = sorted(contained, key=lambda item: (-len(item[0]), item[1]))[0]
+        return best[0]
     token = text.removeprefix("##")
     if not token:
         return text
@@ -183,13 +208,21 @@ class GroundingDinoDetector:
         self.model.to(self.torch_device).eval()
         # De tekstprompt is statisch: tokeniseer eenmalig en hergebruik per
         # frame, zodat alleen het beeld nog verwerkt hoeft te worden.
+        # De gecachte tensors staan meteen op het inference-device, zodat per
+        # frame alleen pixel_values nog H2D hoeft (geen herhaalde text-copy).
         self._text_cache = None
         try:
+            import torch as _torch
+
             text_only = self.processor(text=self.prompt, return_tensors="pt")
-            self._text_cache = {
+            cache = {
                 key: value for key, value in text_only.items()
                 if key in ("input_ids", "attention_mask")}
-            if not self._text_cache:
+            if cache:
+                if self.torch_device == "cuda" and _torch.cuda.is_available():
+                    cache = {k: v.to(self.torch_device) for k, v in cache.items()}
+                self._text_cache = cache
+            else:
                 self._text_cache = None
         except Exception as exc:
             print(f"Waarschuwing: prompt-cache overgeslagen ({exc}).")
@@ -208,10 +241,15 @@ class GroundingDinoDetector:
         if self._text_cache is not None:
             try:
                 inputs = self.processor(images=image, return_tensors="pt")
+                # Alle beeldtensors gaan per frame naar de GPU (pixel_values
+                # én pixel_mask: de backbone gebruikt beide); de teksttensors
+                # staan al op het device (zie __init__) en hoeven niet opnieuw.
+                for key in ("pixel_values", "pixel_mask"):
+                    if key in inputs:
+                        inputs[key] = inputs[key].to(self.torch_device)
                 for key, value in self._text_cache.items():
                     if key not in inputs:
                         inputs[key] = value
-                inputs = inputs.to(self.torch_device)
             except Exception:
                 # Val terug op de oorspronkelijke aanroep (beeld + tekst).
                 inputs = self.processor(
@@ -360,18 +398,18 @@ class Sam3Detector:
                 state = self.processor.set_image(image)
                 for class_id, prompt in enumerate(self.prompts):
                     output = self.processor.set_text_prompt(prompt, state)
-                detections.extend(
-                    Detection(
-                        bbox=tuple(float(value) for value in box),
-                        confidence=float(score),
-                        class_id=class_id,
-                        class_name=prompt,
-                        mask=mask_pixels(mask),
+                    detections.extend(
+                        Detection(
+                            bbox=tuple(float(value) for value in box),
+                            confidence=float(score),
+                            class_id=class_id,
+                            class_name=prompt,
+                            mask=mask_pixels(mask),
+                        )
+                        for mask, box, score in zip(output["masks"],
+                                                    output["boxes"],
+                                                    output["scores"])
                     )
-                    for mask, box, score in zip(output["masks"],
-                                                output["boxes"],
-                                                output["scores"])
-                )
         finally:
             if conf is not None:
                 self.processor.set_confidence_threshold(self.conf_threshold)
@@ -488,7 +526,15 @@ class Sam31Detector:
             mask = None
             if masks is not None and index < len(masks):
                 array = np.asarray(masks[index])
-                mask = array.reshape(array.shape[-2], array.shape[-1]) > 0
+                array = array.reshape(array.shape[-2], array.shape[-1])
+                frame_h, frame_w = frame.shape[:2]
+                if array.shape != (frame_h, frame_w):
+                    array = cv2.resize(
+                        array.astype(np.uint8), (frame_w, frame_h),
+                        interpolation=cv2.INTER_NEAREST).astype(bool)
+                    mask = array > 0
+                else:
+                    mask = array > 0
             x1, y1, x2, y2 = (float(value) for value in xyxy[index])
             detections.append(Detection(
                 bbox=(x1, y1, x2, y2),
@@ -504,3 +550,151 @@ class Sam31Detector:
         if 0 <= class_id < len(self.prompts):
             return self.prompts[class_id]
         return str(class_id)
+
+
+# --- Modulaire detector-interface --------------------------------------
+
+try:
+    from typing import Protocol
+except ImportError:  # Python < 3.8 fallback (niet verwacht, wel veilig)
+    Protocol = object  # type: ignore
+
+
+class Detector(Protocol):
+    """Minimale detector-interface voor `pipeline` en `ObjectTracker`.
+
+    Elke detector neemt een BGR-frame (OpenCV) en retourneert
+    `Detection`-objecten met bbox in pixels. `conf` overschrijft tijdelijk
+    de config-drempel (o.a. voor ByteTrack `track_low_thresh`).
+    """
+
+    def detect(self, frame: np.ndarray,
+               conf: float | None = None) -> list[Detection]:
+        ...  # pragma: no cover
+
+
+class RfDetrDetector:
+    """RF-DETR-detectie als `Detector` (COCO-gewichten, zonder maskers)."""
+
+    def __init__(self, cfg: dict, device: str = "cpu") -> None:
+        import rfdetr
+
+        from duplo.gpu import quiet_third_party_init, setup_cuda_optimizations
+
+        setup_cuda_optimizations(device)
+        self.torch_device = "cuda" if device == "gpu" else "cpu"
+        self.model_id = cfg.get("rfdetr_model", "RFDETRLarge")
+        self.threshold = cfg.get("conf_threshold", 0.25)
+        with quiet_third_party_init():
+            self.model = getattr(rfdetr, self.model_id)(
+                device=self.torch_device)
+            if device == "gpu" and cfg.get("rfdetr_optimize", True):
+                import torch
+
+                self.model.inference(dtype=torch.float16)
+        self.class_names: dict[int, str] = {}
+
+    def detect(self, frame: np.ndarray,
+               conf: float | None = None) -> list[Detection]:
+        threshold = self.threshold if conf is None else conf
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        result = self.model.predict(rgb, threshold=threshold,
+                                    include_source_image=False)
+        names = list(result.data["class_name"])
+        for name in names:
+            if name not in self.class_names.values():
+                self.class_names[len(self.class_names)] = str(name)
+        name_to_id = {name: idx for idx, name in self.class_names.items()}
+        detections = []
+        for box, score, name in zip(result.xyxy, result.confidence, names):
+            x1, y1, x2, y2 = (float(v) for v in box)
+            detections.append(Detection(
+                bbox=(x1, y1, x2, y2), confidence=float(score),
+                class_id=name_to_id[str(name)], class_name=str(name)))
+        return detections
+
+
+class RfDetrSegDetector(RfDetrDetector):
+    """RF-DETR-segmentatie als `Detector` (met maskers op frame-resolutie)."""
+
+    def __init__(self, cfg: dict, device: str = "cpu") -> None:
+        import rfdetr
+
+        from duplo.gpu import quiet_third_party_init, setup_cuda_optimizations
+
+        setup_cuda_optimizations(device)
+        self.torch_device = "cuda" if device == "gpu" else "cpu"
+        self.model_id = cfg.get("rfdetr_seg_model", "RFDETRSeg2XLarge")
+        self.threshold = cfg.get("conf_threshold", 0.25)
+        with quiet_third_party_init():
+            self.model = getattr(rfdetr, self.model_id)(
+                device=self.torch_device)
+            if device == "gpu" and cfg.get("rfdetr_optimize", True):
+                import torch
+
+                self.model.inference(dtype=torch.float16)
+        self.class_names = {}
+
+    def detect(self, frame: np.ndarray,
+               conf: float | None = None) -> list[Detection]:
+        import numpy as _np
+
+        threshold = self.threshold if conf is None else conf
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        result = self.model.predict(rgb, threshold=threshold,
+                                    include_source_image=False)
+        names = list(result.data["class_name"])
+        for name in names:
+            if name not in self.class_names.values():
+                self.class_names[len(self.class_names)] = str(name)
+        name_to_id = {name: idx for idx, name in self.class_names.items()}
+        frame_h, frame_w = frame.shape[:2]
+        detections = []
+        for idx, (box, score, name) in enumerate(
+                zip(result.xyxy, result.confidence, names)):
+            x1, y1, x2, y2 = (float(v) for v in box)
+            mask = None
+            try:
+                raw = _np.asarray(result.mask[idx])
+                raw = raw.reshape(raw.shape[-2], raw.shape[-1])
+                if raw.shape != (frame_h, frame_w):
+                    raw = cv2.resize(raw.astype(_np.uint8),
+                                     (frame_w, frame_h),
+                                     interpolation=cv2.INTER_NEAREST)
+                mask = raw > 0
+            except (IndexError, AttributeError, ValueError):
+                mask = None
+            detections.append(Detection(
+                bbox=(x1, y1, x2, y2), confidence=float(score),
+                class_id=name_to_id[str(name)], class_name=str(name),
+                mask=mask))
+        return detections
+
+
+def create_detector(cfg: dict, device: str, kind: str,
+                    classes: list[str] | None = None) -> Detector:
+    """Factory voor alle detectoren (`yolo`, `yolo_world`, `rfdetr`, ...).
+
+    `kind` is één van: `yolo`, `yolo_world`, `yolo_seg`, `rfdetr`,
+    `rfdetr_seg`, `grounding_dino`, `sam3`, `sam31`. Voor YOLO-varianten
+    wordt `model_key` uit de config gekozen; `classes` zet YOLO-World
+    tekstklassen (anders `tool_classes` uit de config).
+    """
+    if kind == "yolo":
+        return YoloDetector(cfg, device)
+    if kind == "yolo_world":
+        return YoloDetector(cfg, device, model_key="yolo_world_model",
+                            classes=list(classes or cfg["tool_classes"]))
+    if kind == "yolo_seg":
+        return YoloDetector(cfg, device, model_key="yolo_seg_model")
+    if kind == "rfdetr":
+        return RfDetrDetector(cfg, device)
+    if kind == "rfdetr_seg":
+        return RfDetrSegDetector(cfg, device)
+    if kind == "grounding_dino":
+        return GroundingDinoDetector(cfg, device)
+    if kind == "sam3":
+        return Sam3Detector(cfg, device)
+    if kind == "sam31":
+        return Sam31Detector(cfg, device)
+    raise SystemExit(f"Onbekende detector-soort: {kind}")

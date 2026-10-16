@@ -9,23 +9,17 @@ import time
 
 from duplo.benchmark import InferenceTimer, write_run_summary
 from duplo.cli import parse_args
-from duplo.config import load_config, resolve_device
 from duplo.detection import YoloDetector
-from duplo.gpu import ensure_cuda_torch, setup_cuda_optimizations
 from duplo.output import prepare_output_dir, write_rows_csv
+from duplo.pipeline import load_step_config, setup_runtime
 from duplo.tracking import (CSV_COLUMNS, ObjectTracker, build_row, draw_tracks)
 from duplo.video import VideoFrames, video_fps
 from duplo.video_writer import DebugVideoWriter
 
 
 def main(cfg_path: str, device: str | None = None) -> None:
-    cfg = load_config(cfg_path)
-    out_dir = prepare_output_dir(cfg, "yolo_world_tracking")
-
-    device = resolve_device(device, cfg)
-    if device == "gpu":
-        ensure_cuda_torch()
-    setup_cuda_optimizations(device)
+    cfg, out_dir = load_step_config(cfg_path, "yolo_world_tracking")
+    device = setup_runtime(cfg, device)
     model_name = cfg.get("yolo_world_model", "models/yolov8x-worldv2.pt")
     detector = YoloDetector(cfg, device, model_key="yolo_world_model",
                             classes=list(cfg["tool_classes"]))

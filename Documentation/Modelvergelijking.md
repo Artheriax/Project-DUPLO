@@ -2,14 +2,16 @@
 
 *Uitgevoerd op 14 oktober 2026 op `data/Disassembly1.mp4` met de pipelines in `src/` en de instellingen uit `configs/baseline.yaml`. Het bijbehorende cijfermateriaal staat in `outputs/Disassembly1/comparison/` (niet in git; opnieuw te genereren met `run_compare_models.bat`).*
 
+> **Update oktober 2026 (cleanup):** SAM3 had een bug (`Sam3Detector.detect()` gebruikte alleen de laatste prompt; gefixt in `src/duplo/detection.py`) — oude SAM3-cijfers undercounten en moeten opnieuw worden gedraaid. `mask_area` is nu overal een pixel-count op frame-resolutie, YOLO-CSV's hebben `timestamp`, tracking/handpose schrijven `*_summary.json` en `compare_models.py` rapporteert tracking apart (`tracking_comparison.csv`). SAM 3.1 en de vier `*_tracking`-varianten ontbreken nog in de cijfers hieronder; draai `run_sam31_test.bat` + tracking-scripts en `run_compare_models.bat` om dit rapport aan te vullen.
+
 ## 1. Doel
 
-Fase 7 van het technisch plan (zie [PLAN.md](PLAN.md)) draait om **tool recognition**: kan een pretrained model de gereedschappen in de DUPLO-disassemblyvideo's herkennen zonder eigen training? De baseline gebruikt YOLO26x met COCO-gewichten; dit onderzoek zet daar zes alternatieven naast en beantwoordt de vraag welk model voor deze taak het beste past:
+Fase 7 van het technisch plan (zie [PLAN.md](PLAN.md)) draait om **tool recognition**: kan een pretrained model de gereedschappen in de DUPLO-disassemblyvideo's herkennen zonder eigen training? De baseline gebruikt YOLO26x met COCO-gewichten; dit onderzoek zet daar zeven alternatieven naast en beantwoordt de vraag welk model voor deze taak het beste past:
 
 * **RF-DETR** (detectie) en **RF-DETR Seg** (segmentatie) – gesloten vocabulaire, COCO;
 * **Grounding DINO** en **YOLO-World** – open-vocabulary: de gereedschapsnamen gaan als tekstprompt mee;
 * **YOLO26x-seg** (segmentatie) – gesloten vocabulaire, COCO;
-* **SAM3** – open-vocabulary segmentatie op basis van een tekstprompt.
+* **SAM3** en **SAM 3.1** – open-vocabulary segmentatie op basis van een tekstprompt.
 
 ## 2. Testopzet
 

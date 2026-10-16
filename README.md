@@ -8,11 +8,12 @@ Proof of concept voor het automatisch analyseren van DUPLO-disassemblyvideo's. D
 - `data/` – invoervideo's (niet in git)
 - `Documentation/` – [Opdracht.md](Documentation/Opdracht.md) (opdrachtomschrijving), [PLAN.md](Documentation/PLAN.md) (technisch plan) en [Modelvergelijking.md](Documentation/Modelvergelijking.md) (testrapport van de modelvergelijking)
 - `models/` – gedownloade modelgewichten: `yolo26x.pt` en `hand_landmarker.task` (niet in git)
-- `outputs/` – resultaten per video, per stap een eigen submap (`yolo/`, `handpose/`, `tracking/`, `rfdetr/`, `rfdetr_seg/`, `grounding_dino/`, `yolo_world/`, `yolo_seg/`, `sam3/`, `sam31/` en `comparison/`) met CSV's, voorbeeldframes en debug-video
-- `src/duplo/` – gedeelde componenten: CLI, config, GPU-setup, video-inlezen, output, detectie, ByteTrack-tracking en de benchmark-samenvatting per modelstap
+- `outputs/` – resultaten per video, per stap een eigen submap (`yolo/`, `handpose/`, `tracking/`, `yolo_world_tracking/`, `grounding_dino_tracking/`, `sam3_tracking/`, `sam31_tracking/`, `rfdetr/`, `rfdetr_seg/`, `grounding_dino/`, `yolo_world/`, `yolo_seg/`, `sam3/`, `sam31/` en `comparison/`) met CSV's, voorbeeldframes en debug-video
+- `src/duplo/` – gedeelde componenten: CLI, config, GPU-setup (`gpu.py`, incl. `to_cuda_device`), video-inlezen (`video.py`), output (`output.py`), detectie (`detection.py` met `Detector`-protocol + `create_detector`), ByteTrack-tracking (`tracking.py`), benchmark-samenvatting (`benchmark.py`), CSV-schema's (`schema.py`), annotatie (`annotate.py`) en pipeline-orchestratie (`pipeline.py` met `setup_runtime/run_detection_loop`)
 - `src/run_yolo_video.py` – YOLO-pipeline (detectie, in dit project gericht op gereedschappen)
-- `src/run_handpose.py` – MediaPipe-pipeline (handlandmarks)
-- `src/run_tracking.py` – YOLO + ByteTrack-pipeline (objecten volgen over frames)
+- `src/run_handpose.py` – MediaPipe-pipeline (handlandmarks, met `handpose_summary.json` voor timing)
+- `src/run_tracking.py` – YOLO + ByteTrack-pipeline (objecten volgen over frames, met `tracking_summary.json`)
+- `src/run_yolo_world_tracking.py` / `src/run_grounding_dino_tracking.py` / `src/run_sam3_tracking.py` / `src/run_sam31_tracking.py` – open-vocabulary detector + ByteTrack (zelfde tracking-CSV als `run_tracking.py`)
 - `src/run_rfdetr_video.py` – RF-DETR-detectie (COCO-gewichten)
 - `src/run_rfdetr_seg_video.py` – RF-DETR-segmentatie (maskers)
 - `src/run_grounding_dino_video.py` – Grounding DINO (open-vocabulary, tekstprompt met toolklassen)
@@ -20,18 +21,19 @@ Proof of concept voor het automatisch analyseren van DUPLO-disassemblyvideo's. D
 - `src/run_yolo_seg_video.py` – YOLO26-segmentatie (maskers)
 - `src/run_sam3_video.py` – SAM3-segmentatie (open-vocabulary, vereist Hugging Face-toegang)
 - `src/run_sam31_video.py` – SAM 3.1-segmentatie via Ultralytics (open-vocabulary, `sam3.1_multiplex.pt`, vereist Hugging Face-toegang)
-- `src/compare_models.py` – vergelijkt de modeltesten op tooldetectie en snelheid
-- `run_yolo_test.bat` / `run_handpose_test.bat` / `run_tracking_test.bat` / `run_rfdetr_test.bat` / `run_rfdetr_seg_test.bat` / `run_grounding_dino_test.bat` / `run_yolo_world_test.bat` / `run_yolo_seg_test.bat` / `run_sam3_test.bat` / `run_sam31_test.bat` / `run_compare_models.bat` – startscripts voor Windows
+- `src/compare_models.py` – vergelijkt de modeltesten op tooldetectie en snelheid (detectie-score + aparte tracking-tabel `tracking_comparison.csv`)
+- `run_common.bat` – gedeelde venv + pip fast-check (hash van `requirements.txt`; `pip install` wordt overgeslagen bij ongewijzigde hash; forceer met `--upgrade`)
+- `run_yolo_test.bat` / `run_handpose_test.bat` / `run_tracking_test.bat` / `run_rfdetr_test.bat` / `run_rfdetr_seg_test.bat` / `run_grounding_dino_test.bat` / `run_yolo_world_test.bat` / `run_yolo_seg_test.bat` / `run_sam3_test.bat` / `run_sam31_test.bat` / `run_compare_models.bat` – dunne startscripts voor Windows (roepen `run_common.bat` aan)
 
 ## Eerste YOLO-test
 
-Dubbelklik op `run_yolo_test.bat` vanuit de projectmap. Het script maakt `.venv` aan als die nog niet bestaat, installeert of controleert de packages uit `requirements.txt`, controleert de imports en voert daarna de YOLO-test uit op `data/Disassembly1.mp4`.
+Dubbelklik op `run_yolo_test.bat` vanuit de projectmap. Via `run_common.bat` wordt `.venv` aangemaakt als die nog niet bestaat, worden packages uit `requirements.txt` alleen (opnieuw) geïnstalleerd als de hash is gewijzigd (forceer met `run_yolo_test.bat --upgrade`; elke `--upgrade*`-vorm werkt en komt nooit bij Python terecht — de scripts negeren hem via `duplo/cli.py`), worden de imports gecontroleerd en wordt daarna de YOLO-test uitgevoerd op `data/Disassembly1.mp4`.
 
 De eerste run downloadt automatisch het pretrained model `models/yolo26x.pt` als dat nog ontbreekt. De resultaten komen in `outputs/Disassembly1/yolo/`, met detections in `yolo_detections.csv`, voorbeeldframes als JPG-bestanden en een `yolo_debug.mp4` met de getekende bboxes en labels (uit te zetten met `save_yolo_video: false` in de config). Daarnaast schrijft de stap `yolo_summary.json` met de rekentijd per frame, zodat YOLO in `compare_models.py` als baseline meekan.
 
 ## Modelvergelijking: toolrecognition
 
-Voor de toolrecognition zijn naast YOLO zes alternatieven toegevoegd met dezelfde opzet (video in, CSV + voorbeeldframes + debug-video uit). Elk model schrijft in een eigen submap van `outputs/Disassembly1/` en levert naast de CSV ook een `<model>_summary.json` met frames, detections en rekentijd:
+Voor de toolrecognition zijn naast YOLO zeven alternatieven toegevoegd met dezelfde opzet (video in, CSV + voorbeeldframes + debug-video uit). Elk model schrijft in een eigen submap van `outputs/Disassembly1/` en levert naast de CSV ook een `<model>_summary.json` met frames, detections en rekentijd:
 
 | Startscript | Modelstap | Soort | Submap |
 | --- | --- | --- | --- |
@@ -46,7 +48,7 @@ Voor de toolrecognition zijn naast YOLO zes alternatieven toegevoegd met dezelfd
 
 De doelgereedschappen staan als `tool_classes` in `configs/baseline.yaml` (schroevendraaier, steeksleutel, tang, snijder, hamer). De open-vocabulary modellen krijgen die lijst als tekstprompt; de andere modellen gebruiken hun eigen COCO-klassen en kunnen dus alleen gereedschappen vinden die in COCO zitten. De segmentatiestappen loggen ook `mask_area` (maskeroppervlak in pixels).
 
-De nieuwe stappen gebruiken dezelfde kolomopzet als de YOLO-test (`video`, `frame`, `klasse`, `confidence`, `bbox_x`, `bbox_y`, `bbox_w`, `bbox_h`), aangevuld met `timestamp` en bij segmentatie met `mask_area` (maskeroppervlak in pixels), zodat de resultaten onderling te vergelijken zijn.
+Alle detectiestappen gebruiken hetzelfde schema (`video`, `frame`, `timestamp`, `klasse`, `confidence`, `bbox_x`, `bbox_y`, `bbox_w`, `bbox_h`; centraal vastgelegd in `src/duplo/schema.py`), bij segmentatie aangevuld met `mask_area` als pixel-count op frame-resolutie (YOLO-seg via gerasteriseerd polygoon, RF-DETR-seg/SAM via geresized masker — alleen onderling vergelijkbaar binnen segmentatie). Tracking gebruikt `tracking_history.csv` (`frame_number`, `track_id`, `class_name`, `bbox_x1/y1/x2/y2`, `center`, `velocity`, `track_age`, `frames_since_detection`, `status`; zie `src/duplo/tracking.py:CSV_COLUMNS`), handpose `hand_landmarks.csv` (`video`, `frame`, `hand`, `landmark`, `x/y/z`). `compare_models.py` normaliseert `frame/frame_number` en `klasse/class_name`, zodat oude en nieuwe CSV's beide lezen.
 
 **SAM3:** de gewichten van `facebook/sam3` staan achter een Hugging Face-toegangsaanvraag: vraag toegang aan op https://huggingface.co/facebook/sam3 en log daarna in met `hf auth login`. Op Windows is daarnaast `triton-windows` nodig (sam3 importeert `triton`; het officiële pakket heeft geen Windows-wheels) — beide packages staan in `requirements.txt`. Het pip-pakket mist het BPE-vocabulaire voor de tekstencoder; [run_sam3_video.py](src/run_sam3_video.py) haalt dat eenmalig uit de sam3-repo en zet het in `models/`.
 
@@ -62,7 +64,7 @@ Draai eerst de testen die je wilt vergelijken en daarna:
 run_compare_models.bat
 ```
 
-`src/compare_models.py` leest alle modelstappen in `outputs/Disassembly1/` (CSV + summary) en schrijft `outputs/Disassembly1/comparison/model_comparison.csv` en `model_comparison.md` met daarin per model: gevonden toolklassen, tool-detecties, aandeel frames met een tool, gemiddelde confidence, detecties per frame, rekentijd en doorvoer. De rangschikking is een expliciet weegbare heuristic:
+`src/compare_models.py` leest alle detectiestappen in `outputs/Disassembly1/` (`*_detections.csv` + summary) en schrijft `outputs/Disassembly1/comparison/model_comparison.csv` en `model_comparison.md` met daarin per model: gevonden toolklassen, tool-detecties, aandeel frames met een tool, gemiddelde confidence, detecties per frame, rekentijd en doorvoer. Tracking (`*_tracking_history.csv`) krijgt een aparte tabel `tracking_comparison.csv` (tracks, rijen/frame, `confirmed/tentative/occluded`, timing) en weegt niet mee in de detectie-score. De rangschikking is een expliciet weegbare heuristic:
 
 ```text
 score = 100 x (coverage x dekking + presence x tool-frames + speed x min(1, doorvoer/target_fps))
@@ -76,11 +78,11 @@ Let op de kanttekeningen in het rapport: er is geen geannoteerde ground truth, d
 
 ## Eerste MediaPipe-test
 
-Dubbelklik op `run_handpose_test.bat` om MediaPipe handpose op dezelfde video uit te voeren. De handlandmarks komen in `outputs/Disassembly1/handpose/hand_landmarks.csv` en geannoteerde voorbeeldframes worden als JPG-bestanden opgeslagen. Daarnaast schrijft de stap een `handpose_debug.mp4` met de getekende handlandmarks (uit te zetten met `save_handpose_video: false` in de config).
+Dubbelklik op `run_handpose_test.bat` om MediaPipe handpose op dezelfde video uit te voeren. De handlandmarks komen in `outputs/Disassembly1/handpose/hand_landmarks.csv` en geannoteerde voorbeeldframes worden als JPG-bestanden opgeslagen. Daarnaast schrijft de stap een `handpose_debug.mp4` met de getekende handlandmarks (uit te zetten met `save_handpose_video: false` in de config) en een `handpose_summary.json` met timing (geen detectie-score).
 
 ## ByteTrack-tracking
 
-Dubbelklik op `run_tracking_test.bat` om YOLO + ByteTrack op dezelfde video uit te voeren. Elke YOLO-detectie krijgt een unieke track-ID die tussen frames stabiel blijft, ook wanneer een object korte tijd aan het zicht onttrokken is (occlusie). De resultaten komen in `outputs/Disassembly1/tracking/`:
+Dubbelklik op `run_tracking_test.bat` om YOLO + ByteTrack op dezelfde video uit te voeren (voor open-vocabulary tracking: `src/run_yolo_world_tracking.py`, `src/run_grounding_dino_tracking.py`, `src/run_sam3_tracking.py`, `src/run_sam31_tracking.py` — zelfde CSV-opzet, eigen submap; start ze direct via Python, er zijn geen aparte `.bat` wrappers). Elke detectie krijgt een unieke track-ID die tussen frames stabiel blijft, ook wanneer een object korte tijd aan het zicht onttrokken is (occlusie). De resultaten komen in `outputs/Disassembly1/tracking/` (resp. `yolo_world_tracking/`, `grounding_dino_tracking/`, `sam3_tracking/`, `sam31_tracking/`):
 
 - `tracking_history.csv` – per frame één rij per track met `track_id`, `class_id`, `class_name`, `confidence`, `bbox_x1`..`bbox_y2`, `center_x`/`center_y` (bbox en center in pixels), `velocity_x`/`velocity_y` (verplaatsing in pixels per videoframe), `track_age` (frames sinds het ontstaan van de track), `frames_since_detection` en `status`. Rijen met status `occluded` hebben geen bbox of confidence: het object was tijdelijk niet zichtbaar, maar de track blijft bestaan om de occlusie te overbruggen. Rijen met status `tentative` zijn tracks die net gestart zijn en nog bevestigd moeten worden.
 - `tracking_debug.mp4` – debug-video met YOLO-bboxes, klassennamen, confidence, track-ID's en trajectories. Occluded tracks worden grijs weergegeven op hun voorspelde positie. De video wordt als H.264 (yuv420p) geschreven, zodat hij in VS Code, browsers en deelplatforms afspeelt; OpenCV's standaard mp4v-formaat doet dat niet.
@@ -111,11 +113,17 @@ Of direct via Python:
 .venv\Scripts\python.exe src\run_handpose.py --config configs\baseline.yaml --device gpu
 .venv\Scripts\python.exe src\run_tracking.py --config configs\baseline.yaml --device gpu
 .venv\Scripts\python.exe src\run_rfdetr_video.py --config configs\baseline.yaml --device gpu
+.venv\Scripts\python.exe src\run_rfdetr_seg_video.py --config configs\baseline.yaml --device gpu
+.venv\Scripts\python.exe src\run_grounding_dino_video.py --config configs\baseline.yaml --device gpu
+.venv\Scripts\python.exe src\run_yolo_world_video.py --config configs\baseline.yaml --device gpu
+.venv\Scripts\python.exe src\run_yolo_seg_video.py --config configs\baseline.yaml --device gpu
+.venv\Scripts\python.exe src\run_sam3_video.py --config configs\baseline.yaml --device gpu
+.venv\Scripts\python.exe src\run_sam31_video.py --config configs\baseline.yaml --device gpu
 ```
 
 Zonder argument gebruiken de scripts de waarde van `device` in `configs\baseline.yaml` (daar staat `gpu`; met `--device cpu` dwing je een CPU-run af).
 
-**YOLO:** bij `--device gpu` controleert het script of torch CUDA ondersteunt en installeert het automatisch de CUDA-build van torch (`--index-url https://download.pytorch.org/whl/cu130`) als dat nog niet het geval is. De eerste keer kan dit enkele minuten duren (download van ca. 2 GB). De ByteTrack-tracker in `run_tracking.py` draait op de CPU en heeft geen CUDA nodig; alleen de YOLO-detectie gebruikt de GPU.
+**YOLO:** bij `--device gpu` controleert het script of torch CUDA ondersteunt. Standaard volgt een foutmelding met het installatie-commando (`pip install -U torch torchvision --index-url https://download.pytorch.org/whl/cu130`); alleen met `auto_install_torch: true` in de config wordt de CUDA-build (~2 GB) automatisch geïnstalleerd. De ByteTrack-tracker draait op de CPU en heeft geen CUDA nodig; alleen de detectie gebruikt de GPU. `yolo_half` (FP16 via `quantize=16`), `yolo_fuse` en `yolo_backend: tensorrt` (opt-in `.engine`-export met fallback op `.pt`) veranderen alleen kernels, geen drempels/gewichten. `video_encoder: auto` gebruikt NVENC indien aanwezig, anders x264, anders mp4v.
 
 **MediaPipe:** in de huidige Windows-build van mediapipe is de GPU-delegate niet beschikbaar. `--device gpu` wordt geaccepteerd, maar het script meldt dit en valt terug op CPU.
 

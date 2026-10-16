@@ -1,40 +1,21 @@
 @echo off
+rem Wrapper om run_common.bat: alle argumenten (%*) gaan door naar Python,
+rem inclusief --upgrade (bat-level flag; Python negeert hem via cli.py).
 setlocal
-
-pushd "%~dp0"
+call "%~dp0run_common.bat" %*
 if errorlevel 1 (
-    echo ERROR: Kan de projectmap niet openen.
+    popd
     exit /b 1
 )
-
-set "VENV_DIR=%CD%\.venv"
-set "PYTHON=%VENV_DIR%\Scripts\python.exe"
-
-if not exist "%PYTHON%" (
-    echo ERROR: De virtuele omgeving ontbreekt.
-    echo Start eerst run_yolo_test.bat om de omgeving aan te maken.
-    exit /b 1
-)
-
-echo [1/3] Python packages controleren...
-"%PYTHON%" -m pip install --upgrade pip
-"%PYTHON%" -m pip install -U -r requirements.txt
+"%PYTHON%" -c "import mediapipe" 2>nul
 if errorlevel 1 (
-    echo ERROR: Een of meer packages konden niet worden geinstalleerd.
+    echo ERROR: mediapipe ontbreekt; draai met --upgrade om requirements opnieuw te installeren.
+    popd
     exit /b 1
 )
-
-echo [2/3] Imports verifieren...
-"%PYTHON%" -c "import cv2, mediapipe, pandas, yaml, tqdm; print('Alle MediaPipe imports zijn beschikbaar.')"
-if errorlevel 1 (
-    echo ERROR: De Python-omgeving is niet compleet.
-    exit /b 1
-)
-
-echo [3/3] MediaPipe handpose-test uitvoeren...
+echo [4/4] MediaPipe handpose-test uitvoeren...
 "%PYTHON%" -u src\run_handpose.py --config configs\baseline.yaml %*
 set "EXIT_CODE=%ERRORLEVEL%"
-
 if "%EXIT_CODE%"=="0" (
     echo.
     echo Klaar. Handlandmarks staan in outputs\Disassembly1
@@ -42,6 +23,5 @@ if "%EXIT_CODE%"=="0" (
     echo.
     echo ERROR: De MediaPipe-test is gestopt met code %EXIT_CODE%.
 )
-
 popd
 exit /b %EXIT_CODE%

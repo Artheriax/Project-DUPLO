@@ -7,21 +7,21 @@ import time
 
 import cv2
 
-from duplo.benchmark import InferenceTimer, write_run_summary
+from duplo.annotate import supervision_annotate
+from duplo.benchmark import InferenceTimer
 from duplo.cli import parse_args
-from duplo.config import load_config, resolve_device
-from duplo.gpu import (ensure_cuda_torch, quiet_third_party_init,
-                   setup_cuda_optimizations)
-from duplo.output import prepare_output_dir, save_screenshot, write_rows_csv
-from duplo.video import VideoFrames, video_fps
-from duplo.video_writer import DebugVideoWriter
-
-CSV_COLUMNS = ["video", "frame", "timestamp", "klasse", "confidence",
-               "bbox_x", "bbox_y", "bbox_w", "bbox_h"]
+from duplo.gpu import quiet_third_party_init
+from duplo.output import save_screenshot
+from duplo.pipeline import (finish_detection_run, load_step_config,
+                             open_debug_writer, setup_runtime,
+                             should_screenshot, video_params)
+from duplo.schema import DETECTION_COLUMNS as CSV_COLUMNS
+from duplo.schema import detection_row
+from duplo.video import VideoFrames
 
 
 def build_detector(cfg: dict, device: str):
-    """RFDETR-model uit de config; pas importeren na een eventuele CUDA-installatie."""
+    """RFDETR-model uit de config; pas importeren na een CUDA-installatie."""
     import rfdetr
 
     model_name = cfg.get("rfdetr_model", "RFDETRLarge")
@@ -29,31 +29,12 @@ def build_detector(cfg: dict, device: str):
         device="cuda" if device == "gpu" else "cpu")
 
 
-def annotate(frame, detections, box_annotator=None, label_annotator=None):
-    """Frame met bboxes en labels voor de debug-video en voorbeeldframes."""
-    import supervision as sv
-
-    labels = [f"{name} {float(confidence):.2f}" for name, confidence in
-              zip(detections.data["class_name"], detections.confidence)]
-    box_annotator = box_annotator or sv.BoxAnnotator(thickness=2)
-    label_annotator = (label_annotator
-                       or sv.LabelAnnotator(text_scale=0.5, text_thickness=1))
-    annotated = box_annotator.annotate(frame, detections)
-    return label_annotator.annotate(annotated, detections, labels)
-
-
 def main(cfg_path: str, device: str | None = None) -> None:
-    cfg = load_config(cfg_path)
-    out_dir = prepare_output_dir(cfg, "rfdetr")
-
-    device = resolve_device(device, cfg)
-    if device == "gpu":
-        ensure_cuda_torch()
-    setup_cuda_optimizations(device)
+    cfg, out_dir = load_step_config(cfg_path, "rfdetr")
+    device = setup_runtime(cfg, device)
     with quiet_third_party_init():
         model_name, model = build_detector(cfg, device)
         if device == "gpu" and cfg.get("rfdetr_optimize", True):
-            # Gedocumenteerde real-time route van RF-DETR (FP16 + compile).
             import torch
             model.inference(dtype=torch.float16)
     print(f"RF-DETR ({model_name}) draait op {device.upper()}")
@@ -63,20 +44,15 @@ def main(cfg_path: str, device: str | None = None) -> None:
     box_annotator = sv.BoxAnnotator(thickness=2)
     label_annotator = sv.LabelAnnotator(text_scale=0.5, text_thickness=1)
     threshold = cfg["conf_threshold"]
-    fps = video_fps(cfg["video_path"])
-    stride = cfg.get("frame_stride", 1)
-    screenshot_every = cfg.get("screenshot_every", 150)
+    fps, stride, screenshot_every = video_params(cfg)
     timer = InferenceTimer()
-    video = (DebugVideoWriter(out_dir / "rfdetr_debug.mp4", fps / stride,
-                              encoder=cfg.get("video_encoder", "auto"))
-             if cfg.get("save_rfdetr_video", True) else None)
+    video = open_debug_writer(out_dir, "rfdetr_debug.mp4", fps, stride,
+                              cfg, "save_rfdetr_video")
     rows = []
     frames = VideoFrames(cfg["video_path"], stride=stride, desc="RF-DETR")
     started = time.perf_counter()
     try:
         for frame_idx, frame in frames:
-            # RF-DETR verwacht RGB; cvtColor levert een contiguous array
-            # (snellere H2D-kopie dan frame[:, :, ::-1]).
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             with timer:
                 detections = model.predict(
@@ -85,41 +61,31 @@ def main(cfg_path: str, device: str | None = None) -> None:
             class_names = detections.data["class_name"]
             for index, (box, confidence) in enumerate(
                     zip(detections.xyxy, detections.confidence)):
-                x1, y1, x2, y2 = (int(round(float(value))) for value in box)
-                rows.append({
-                    "video": cfg["video_path"], "frame": frame_idx,
-                    "timestamp": round(frame_idx / fps, 3),
-                    "klasse": str(class_names[index]),
-                    "confidence": round(float(confidence), 3),
-                    "bbox_x": x1, "bbox_y": y1,
-                    "bbox_w": x2 - x1, "bbox_h": y2 - y1,
-                })
+                x1, y1, x2, y2 = (int(round(float(v))) for v in box)
+                rows.append(detection_row(
+                    cfg["video_path"], frame_idx, fps,
+                    str(class_names[index]), float(confidence),
+                    x1, y1, x2, y2))
             need_video = video is not None
-            need_shot = (screenshot_every > 0
-                         and frame_idx % screenshot_every == 0)
+            need_shot = should_screenshot(screenshot_every, frame_idx)
             if need_video or need_shot:
-                annotated = annotate(frame, detections, box_annotator,
-                                     label_annotator)
+                annotated = supervision_annotate(
+                    frame, detections, sv, box_annotator=box_annotator,
+                    label_annotator=label_annotator)
                 if need_video:
                     video.write(annotated)
                 if need_shot:
                     save_screenshot(out_dir, "rfdetr_frame", frame_idx,
                                     annotated)
     finally:
-        # Ook bij een onderbreking de debug-video netjes afsluiten.
         if video is not None:
             video.release()
 
-    write_rows_csv(out_dir, "rfdetr_detections.csv", rows, CSV_COLUMNS)
-    summary = write_run_summary(
+    finish_detection_run(
         out_dir, "rfdetr", model=model_name, device=device,
-        video=cfg["video_path"], frames_read=frames.frames_read,
-        frames_processed=len(timer.times_ms),
-        elapsed_s=time.perf_counter() - started, rows=rows, timer=timer,
-        csv_file="rfdetr_detections.csv",
+        video_path=cfg["video_path"], frames=frames, started=started,
+        rows=rows, timer=timer, csv_file="rfdetr_detections.csv",
         extra={"conf_threshold": threshold, "frame_stride": stride})
-    print(f"{frames.frames_read} frames verwerkt, {len(rows)} detections, "
-          f"{summary['inference_fps']} fps -> {out_dir}")
 
 
 if __name__ == "__main__":

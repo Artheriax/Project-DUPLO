@@ -1,4 +1,5 @@
 """MediaPipe Hands op een video; logt 21 landmerken per hand naar CSV."""
+import time
 from pathlib import Path
 from urllib.request import urlretrieve
 
@@ -7,6 +8,7 @@ import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 
+from duplo.benchmark import InferenceTimer, write_run_summary
 from duplo.cli import parse_args
 from duplo.config import load_config, resolve_device
 from duplo.output import prepare_output_dir, save_screenshot, write_rows_csv
@@ -99,18 +101,21 @@ def main(cfg_path: str, device: str | None = None) -> None:
     fps = video_fps(cfg["video_path"])
     stride = cfg.get("frame_stride", 1)
     screenshot_every = cfg.get("screenshot_every", 150)
+    timer = InferenceTimer()
     video = (DebugVideoWriter(out_dir / "handpose_debug.mp4", fps / stride,
                               encoder=cfg.get("video_encoder", "auto"))
              if cfg.get("save_handpose_video", True) else None)
     rows = []
     frames = VideoFrames(cfg["video_path"], stride=stride, desc="MediaPipe")
+    started = time.perf_counter()
     try:
         with hands:
             for frame_idx, frame in frames:
                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
                 timestamp_ms = int(frame_idx * 1000 / fps)
-                res = hands.detect_for_video(image, timestamp_ms)
+                with timer:
+                    res = hands.detect_for_video(image, timestamp_ms)
                 has_hands = bool(res.hand_landmarks)
                 if has_hands:
                     for h_idx, landmarks in enumerate(res.hand_landmarks):
@@ -136,7 +141,19 @@ def main(cfg_path: str, device: str | None = None) -> None:
             video.release()
 
     write_rows_csv(out_dir, "hand_landmarks.csv", rows, CSV_COLUMNS)
-    print(f"{frames.frames_read} frames verwerkt -> {out_dir}")
+    # Handpose heeft geen 'klasse'-kolom; registreer timing + counts met een
+    # dummy-rijenlijst voor write_run_summary (alleen fps/tijd relevant).
+    summary = write_run_summary(
+        out_dir, "handpose", model=str(model_path), device=device,
+        video=cfg["video_path"], frames_read=frames.frames_read,
+        frames_processed=len(timer.times_ms),
+        elapsed_s=time.perf_counter() - started, rows=[], timer=timer,
+        csv_file="hand_landmarks.csv", class_field="hand",
+        extra={"conf_threshold": cfg.get("conf_threshold"),
+               "frame_stride": stride,
+               "landmark_rows": len(rows)})
+    print(f"{frames.frames_read} frames verwerkt, {len(rows)} landmarks, "
+          f"{summary['inference_fps']} fps -> {out_dir}")
 
 
 if __name__ == "__main__":
