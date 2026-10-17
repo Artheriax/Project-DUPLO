@@ -1,12 +1,10 @@
 """Centrale CSV-schema's en rij-builders voor alle pipeline-stappen.
 
 Eén bron voor kolomvolgorde, zodat `run_*` scripts en `compare_models.py`
-niet divergeren. Detectie (8 kolommen, met `timestamp`), segmentatie
+niet divergeren. Detectie (9 kolommen, met `timestamp`), segmentatie
 (10 kolommen, met `mask_area`), tracking (18 kolommen uit `tracking.py`)
 en handpose (8 kolommen) staan hier vast.
 """
-from duplo.tracking import CSV_COLUMNS as TRACKING_COLUMNS
-
 DETECTION_COLUMNS = ["video", "frame", "timestamp", "klasse", "confidence",
                      "bbox_x", "bbox_y", "bbox_w", "bbox_h"]
 

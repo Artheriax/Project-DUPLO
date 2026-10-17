@@ -100,7 +100,8 @@ class TrackObservation:
     bbox, center en confidence zijn alleen gevuld als het object in dit frame
     gedetecteerd is (status "confirmed" of "tentative"). Bij status "occluded"
     was het object tijdelijk niet zichtbaar en bevat predicted_bbox de door het
-    Kalman-filter voorspelde positie.
+    Kalman-filter voorspelde positie. track_age en frames_since_detection
+    gebruiken de bronframe-index, net als frame_number in de CSV.
     """
 
     track_id: int
@@ -173,6 +174,8 @@ class ObjectTracker:
         self.trajectory_length = cfg.get("track_trajectory_length", 60)
         self._detections: list[Detection] = []
         self._last_seen: dict[int, tuple[int, float, float]] = {}
+        self._first_frame: dict[int, int] = {}
+        self._last_detection_frame: dict[int, int] = {}
         self.trajectories: dict[int, deque[tuple[float, float]]] = {}
 
     def update(self, frame_number: int, frame: np.ndarray,
@@ -215,6 +218,8 @@ class ObjectTracker:
                     velocity = ((center[0] - previous[1]) / elapsed,
                                 (center[1] - previous[2]) / elapsed)
             self._last_seen[track_id] = (frame_number, center[0], center[1])
+            self._first_frame.setdefault(track_id, frame_number)
+            self._last_detection_frame[track_id] = frame_number
             self.trajectories.setdefault(
                 track_id, deque(maxlen=self.trajectory_length)).append(center)
         if not visible:
@@ -231,8 +236,11 @@ class ObjectTracker:
             predicted_bbox=predicted_bbox,
             center=center,
             velocity=velocity,
-            track_age=self._tracker.frame_id - track.start_frame,
-            frames_since_detection=self._tracker.frame_id - track.frame_id,
+            track_age=frame_number - self._first_frame.get(track_id,
+                                                           frame_number),
+            frames_since_detection=(
+                frame_number - self._last_detection_frame.get(
+                    track_id, frame_number)),
             status=status,
         )
 

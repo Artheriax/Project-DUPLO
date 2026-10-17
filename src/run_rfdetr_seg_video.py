@@ -87,6 +87,7 @@ def main(cfg_path: str, device: str | None = None) -> None:
         out_dir, "rfdetr_seg", model=model_name, device=device,
         video_path=cfg["video_path"], frames=frames, started=started,
         rows=rows, timer=timer, csv_file="rfdetr_seg_detections.csv",
+        columns=CSV_COLUMNS,
         extra={"conf_threshold": threshold, "frame_stride": stride})
 
 

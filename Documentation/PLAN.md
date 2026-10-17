@@ -76,12 +76,13 @@ Gebruik YOLO26X met pretrained weights als eerste baseline voor de detectie van 
 
 Per frame worden minimaal opgeslagen:
 
-* frame_number
+* frame (bronframe-index)
 * timestamp
-* class_id
-* class_name
+* klasse (class_name)
 * confidence
-* bounding box: x1, y1, x2, y2
+* bounding box: bbox_x, bbox_y, bbox_w, bbox_h
+
+De tracking-CSV bevat daarnaast `class_id` en de trackgeschiedenis per `track_id`.
 
 De pretrained versie wordt gebruikt om te onderzoeken welke gereedschappen al zonder training uit de beschikbare video's kunnen worden gehaald (bijvoorbeeld schroevendraaiers, tangen en andere gangbare tools).
 
@@ -174,10 +175,10 @@ MediaPipe Hands wordt onafhankelijk van YOLO/ByteTrack gebruikt.
 
 Per frame worden opgeslagen:
 
-* left/right hand;
+* hand (0/1-detectievolgorde; MediaPipe-handedness wordt nog niet opgeslagen);
 * 21 landmarks;
 * landmark x/y/z;
-* hand confidence indien beschikbaar.
+* zichtbaar (huidige implementatie: 1.0; handconfidence is toekomstig werk).
 
 De handdata krijgt dezelfde:
 

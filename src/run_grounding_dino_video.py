@@ -38,7 +38,7 @@ def main(cfg_path: str, device: str | None = None) -> None:
         video_file="grounding_dino_debug.mp4",
         video_flag="save_grounding_dino_video",
         shot_prefix="grounding_dino_frame",
-        model_id=detector.model_id, device=device,
+        model_id=detector.model_id, device=device, columns=CSV_COLUMNS,
         extra_summary={"conf_threshold": detector.box_threshold,
                        "tekstprompt": detector.prompt})
 

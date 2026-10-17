@@ -12,6 +12,7 @@ from duplo.benchmark import InferenceTimer, write_run_summary
 from duplo.cli import parse_args
 from duplo.config import load_config, resolve_device
 from duplo.output import prepare_output_dir, save_screenshot, write_rows_csv
+from duplo.schema import HANDPOSE_COLUMNS
 from duplo.video import VideoFrames, video_fps
 from duplo.video_writer import DebugVideoWriter
 
@@ -28,7 +29,6 @@ HAND_CONNECTIONS = (
     (13, 17), (17, 18), (18, 19), (19, 20),
     (0, 17),
 )
-CSV_COLUMNS = ["video", "frame", "hand", "landmark", "x", "y", "z", "zichtbaar"]
 
 
 def get_model_path(cfg: dict) -> Path:
@@ -140,7 +140,7 @@ def main(cfg_path: str, device: str | None = None) -> None:
         if video is not None:
             video.release()
 
-    write_rows_csv(out_dir, "hand_landmarks.csv", rows, CSV_COLUMNS)
+    write_rows_csv(out_dir, "hand_landmarks.csv", rows, HANDPOSE_COLUMNS)
     # Handpose heeft geen 'klasse'-kolom; registreer timing + counts met een
     # dummy-rijenlijst voor write_run_summary (alleen fps/tijd relevant).
     summary = write_run_summary(

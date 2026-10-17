@@ -10,7 +10,7 @@ import time
 from duplo.benchmark import InferenceTimer, write_run_summary
 from duplo.cli import parse_args
 from duplo.detection import GroundingDinoDetector
-from duplo.output import prepare_output_dir, write_rows_csv
+from duplo.output import write_rows_csv
 from duplo.pipeline import load_step_config, setup_runtime
 from duplo.tracking import (CSV_COLUMNS, ObjectTracker, build_row, draw_tracks)
 from duplo.video import VideoFrames, video_fps

@@ -47,7 +47,7 @@ def main(cfg_path: str, device: str | None = None) -> None:
         annotate_fn=draw_segmentations,
         csv_file="sam31_detections.csv", video_file="sam31_debug.mp4",
         video_flag="save_sam31_video", shot_prefix="sam31_frame",
-        model_id=detector.model_id, device=device,
+        model_id=detector.model_id, device=device, columns=CSV_COLUMNS,
         extra_summary={"tekstprompt": detector.prompts})
 
 

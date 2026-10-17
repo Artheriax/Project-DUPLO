@@ -152,8 +152,9 @@ def normalize_label(label: str, tool_classes: list[str]) -> str:
     wanneer meerdere prompts op hetzelfde object passen; in de CSV staat dan
     de langste (meest specifieke) gereedschapsklasse, bij gelijke lengte de
     eerstgenoemde. Soms bestaat een label uit een deelwoord ("screw",
-    "##driver", "pl"); die woorden worden aan de gereedschapsklasse
-    gekoppeld waar ze het begin of het eind van zijn.
+    "##drive", "pl"); die woorden worden aan de gereedschapsklasse gekoppeld
+    waar ze in voorkomen, aan het begin of aan het eind staan, of waarvan ze
+    de eerste vier letters delen.
     """
     text = str(label).strip().lower()
     if text in tool_classes:
@@ -167,7 +168,11 @@ def normalize_label(label: str, tool_classes: list[str]) -> str:
     if not token:
         return text
     partial = [tool for tool in tool_classes
-               if tool.startswith(token) or tool.endswith(token)]
+               if tool.startswith(token) or tool.endswith(token)
+               or token in tool]
+    if not partial and len(token) >= 4:
+        stem = token[:4]
+        partial = [tool for tool in tool_classes if tool.startswith(stem)]
     return partial[0] if partial else text
 
 

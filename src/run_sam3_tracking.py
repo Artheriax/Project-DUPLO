@@ -3,15 +3,15 @@ debug-video met bboxes, track-ID's en trajectories.
 
 SAM3 segmenteert de gereedschappen uit ``tool_classes`` via de tekstprompt;
 ByteTrack koppelt de detecties tussen frames aan dezelfde track-ID's, net als
-in ``run_tracking.py`` voor het YOLO-model. Voor SAM3's eigen videotracker
-(met prompts over de hele video) is er ``run_sam3_video_tracking.py``.
+in ``run_tracking.py`` voor het YOLO-model. SAM3's eigen videotracker wordt
+hier niet gebruikt.
 """
 import time
 
 from duplo.benchmark import InferenceTimer, write_run_summary
 from duplo.cli import parse_args
 from duplo.detection import Sam3Detector
-from duplo.output import prepare_output_dir, write_rows_csv
+from duplo.output import write_rows_csv
 from duplo.pipeline import load_step_config, setup_runtime
 from duplo.tracking import (CSV_COLUMNS, ObjectTracker, build_row, draw_tracks)
 from duplo.video import VideoFrames, video_fps

@@ -12,7 +12,7 @@ save_handpose_video: true                # debug-video met getekende handlandmar
 track_high_thresh: 0.25                   # eerste associatie: alleen vrij zekere detecties (minder ruistracks)
 track_low_thresh: 0.1                    # ondergrens voor detecties; lagere scores worden in de tweede associatiestap gebruikt
 new_track_thresh: 0.25                    # minimale score om een nieuwe track te starten (minder kortstondige tracks)
-track_buffer: 30                         # frames dat een track zonder detectie blijft bestaan (~3 s videotijd bij frame_stride 2)
+track_buffer: 30                         # verwerkte frames dat een track zonder detectie blijft bestaan (~2 s videotijd bij frame_stride 2)
 match_thresh: 0.8                        # associatiedrempel voor de eerste stap
 fuse_score: true                         # detectiescore meewegen in de associatie-afstand
 track_trajectory_length: 60              # lengte van de getekende trajectory in de debug-video

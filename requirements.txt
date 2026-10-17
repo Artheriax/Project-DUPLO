@@ -1,7 +1,7 @@
 # Project DUPLO — gepinde dependencies (getest op Python 3.13, Windows, RTX 5080).
 # Installeren via run_common.bat (fast-check, slaat over bij ongewijzigde hash).
-# Gebruik `run_*_test.bat --upgrade` om na een requirements-wijziging geforceerd
-# opnieuw te installeren.
+# Gebruik `run_*_test.bat --upgrade` om de hash-check over te slaan en pip
+# opnieuw te laten controleren.
 ultralytics==8.4.177
 lap==0.5.13  # ByteTrack-associatie (ultralytics tracker dependency)
 mediapipe==1.1.1

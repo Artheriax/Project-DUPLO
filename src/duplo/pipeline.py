@@ -5,9 +5,10 @@ device-resolutie + CUDA-setup, fps/stride/screenshot-config, debug-video
 writer, `VideoFrames`-loop-skelet, CSV + `*_summary.json` afsluiting.
 
 Detectie-neutraal: drempels, imgsz, gewichten en annotatie-keuzes blijven in
-de caller; alleen重复的 orchestratie staat hier.
+de caller; alleen gedeelde orchestratie staat hier.
 """
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Callable
 
@@ -62,11 +63,12 @@ def should_screenshot(screenshot_every: int, frame_idx: int) -> bool:
 def finish_detection_run(out_dir: Path, step: str, *, model: str, device: str,
                          video_path: str, frames: VideoFrames,
                          started: float, rows: list[dict], timer: InferenceTimer,
-                         csv_file: str, class_field: str = "klasse",
+                         csv_file: str, columns: Sequence[str] | None = None,
+                         class_field: str = "klasse",
                          extra: dict | None = None) -> dict:
     """Schrijf CSV + summary en print één regel resultaat. Retourneert summary."""
-    # Kolomvolgorde afleiden uit de eerste rij als die er is.
-    columns = list(rows[0].keys()) if rows else None
+    columns = list(columns) if columns is not None else (
+        list(rows[0].keys()) if rows else None)
     write_rows_csv(out_dir, csv_file, rows, columns)
     summary = write_run_summary(
         out_dir, step, model=model, device=device, video=video_path,
@@ -89,6 +91,7 @@ def run_detection_loop(cfg: dict, out_dir: Path, *, desc: str,
                        annotate_fn: AnnotateFn | None,
                        csv_file: str, video_file: str, video_flag: str,
                        shot_prefix: str, model_id: str, device: str,
+                       columns: Sequence[str] | None = None,
                        extra_summary: dict | None = None,
                        class_field: str = "klasse") -> dict:
     """Generieke detectie-loop (video in, CSV + debug-video uit).
@@ -125,7 +128,7 @@ def run_detection_loop(cfg: dict, out_dir: Path, *, desc: str,
     return finish_detection_run(
         out_dir, out_dir.name, model=model_id, device=device,
         video_path=cfg["video_path"], frames=frames, started=started,
-        rows=rows, timer=timer, csv_file=csv_file,
+        rows=rows, timer=timer, csv_file=csv_file, columns=columns,
         class_field=class_field,
         extra={"conf_threshold": cfg.get("conf_threshold"),
                "frame_stride": stride, **(extra_summary or {})})

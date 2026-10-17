@@ -73,7 +73,7 @@ def main(cfg_path: str, device: str | None = None) -> None:
         out_dir, "yolo", model=str(cfg.get("yolo_model", "yolo")),
         device=device, video_path=cfg["video_path"], frames=frames,
         started=started, rows=rows, timer=timer,
-        csv_file="yolo_detections.csv",
+        csv_file="yolo_detections.csv", columns=CSV_COLUMNS,
         extra={"conf_threshold": cfg["conf_threshold"],
                "frame_stride": stride})
 
