@@ -24,13 +24,15 @@ def main(cfg_path: str, device: str | None = None) -> None:
     cfg, out_dir = load_step_config(cfg_path, "sam31_tracking")
     device = setup_runtime(cfg, device)
     detector = Sam31Detector(cfg, device)
-    tracker = ObjectTracker(cfg)
+    tracking_cfg = {**cfg, **cfg.get("sam31_tracking", {})}
+    tracker = ObjectTracker(tracking_cfg)
     print(f"SAM 3.1 ({detector.model_id}) + ByteTrack draaien op "
           f"{detector.device.upper()} met prompts: {', '.join(detector.prompts)}")
 
     fps = video_fps(cfg["video_path"])
     stride = cfg.get("frame_stride", 1)
-    low_conf = cfg.get("track_low_thresh", 0.1)
+    low_conf = tracking_cfg.get(
+        "detection_conf", tracking_cfg.get("track_low_thresh", 0.1))
     timer = InferenceTimer()
 
     rows = []
@@ -65,8 +67,9 @@ def main(cfg_path: str, device: str | None = None) -> None:
         frames_processed=len(timer.times_ms),
         elapsed_s=time.perf_counter() - started, rows=rows, timer=timer,
         csv_file="sam31_tracking_history.csv", class_field="class_name",
-        extra={"conf_threshold": cfg["conf_threshold"], "frame_stride": stride,
-               "tekstprompt": detector.prompts, "track_low_thresh": low_conf})
+        extra={"conf_threshold": detector.conf_threshold, "frame_stride": stride,
+               "tekstprompt": detector.prompts, "track_low_thresh": low_conf,
+               "tracking_config": cfg.get("sam31_tracking", {})})
     track_ids = {row["track_id"] for row in rows}
     print(f"{frames.frames_read} frames verwerkt, {len(track_ids)} tracks, "
           f"{len(rows)} rijen, {summary['inference_fps']} fps -> {out_dir}")

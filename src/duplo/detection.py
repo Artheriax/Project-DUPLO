@@ -454,7 +454,8 @@ class Sam31Detector:
         setup_cuda_optimizations(device)
         self.model_id = cfg.get("sam31_model", "models/sam3.1_multiplex.pt")
         self.device = "cuda" if device == "gpu" else "cpu"
-        self.conf_threshold = cfg.get("conf_threshold", 0.25)
+        self.conf_threshold = cfg.get(
+            "sam31_conf_threshold", cfg.get("conf_threshold", 0.25))
         self.prompts = [str(prompt) for prompt in
                         (cfg.get("sam31_prompts") or cfg["tool_classes"])]
         self.class_names = {index: name

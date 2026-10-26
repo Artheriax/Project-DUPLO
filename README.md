@@ -23,7 +23,13 @@ Proof of concept voor het automatisch analyseren van DUPLO-disassemblyvideo's. D
 - `src/run_sam31_video.py` – SAM 3.1-segmentatie via Ultralytics (open-vocabulary, `sam3.1_multiplex.pt`, vereist Hugging Face-toegang)
 - `src/compare_models.py` – vergelijkt de modeltesten op tooldetectie en snelheid (detectie-score + aparte tracking-tabel `tracking_comparison.csv`)
 - `run_common.bat` – gedeelde venv + pip fast-check (hash van `requirements.txt`; `pip install` wordt overgeslagen bij ongewijzigde hash; forceer met `--upgrade`)
-- `run_yolo_test.bat` / `run_handpose_test.bat` / `run_tracking_test.bat` / `run_rfdetr_test.bat` / `run_rfdetr_seg_test.bat` / `run_grounding_dino_test.bat` / `run_yolo_world_test.bat` / `run_yolo_seg_test.bat` / `run_sam3_test.bat` / `run_sam31_test.bat` / `run_compare_models.bat` – dunne startscripts voor Windows (roepen `run_common.bat` aan)
+- `run_yolo_test.bat` / `run_handpose_test.bat` / `run_tracking_test.bat` / `run_rfdetr_test.bat` / `run_rfdetr_seg_test.bat` / `run_grounding_dino_test.bat` / `run_yolo_world_test.bat` / `run_yolo_seg_test.bat` / `run_sam3_test.bat` / `run_sam31_test.bat` / `run_sam31_tracking_test.bat` / `run_compare_models.bat` – dunne startscripts voor Windows (roepen `run_common.bat` aan)
+
+SAM 3.1 gebruikt in `configs/baseline.yaml` een eigen `sam31_tracking`-blok:
+de lage `detection_conf`-drempel levert kandidaten voor ByteTrack, terwijl
+`track_high_thresh` en `new_track_thresh` voorkomen dat zwakke hypotheses nieuwe
+tracks starten. `track_buffer` en `match_thresh` zijn bewust alleen voor SAM 3.1
+ingesteld en wijzigen de andere trackingvarianten niet.
 
 ## Eerste YOLO-test
 
@@ -82,7 +88,7 @@ Dubbelklik op `run_handpose_test.bat` om MediaPipe handpose op dezelfde video ui
 
 ## ByteTrack-tracking
 
-Dubbelklik op `run_tracking_test.bat` om YOLO + ByteTrack op dezelfde video uit te voeren (voor open-vocabulary tracking: `src/run_yolo_world_tracking.py`, `src/run_grounding_dino_tracking.py`, `src/run_sam3_tracking.py`, `src/run_sam31_tracking.py` — zelfde CSV-opzet, eigen submap; start ze direct via Python, er zijn geen aparte `.bat` wrappers). Elke detectie krijgt een unieke track-ID die tussen frames stabiel blijft, ook wanneer een object korte tijd aan het zicht onttrokken is (occlusie). De resultaten komen in `outputs/Disassembly1/tracking/` (resp. `yolo_world_tracking/`, `grounding_dino_tracking/`, `sam3_tracking/`, `sam31_tracking/`):
+Dubbelklik op `run_tracking_test.bat` om YOLO + ByteTrack op dezelfde video uit te voeren. Voor SAM 3.1 gebruik je `run_sam31_tracking_test.bat`; de overige open-vocabulary varianten zijn direct via Python te starten (`src/run_yolo_world_tracking.py`, `src/run_grounding_dino_tracking.py` en `src/run_sam3_tracking.py`). Elke detectie krijgt een unieke track-ID die tussen frames stabiel blijft, ook wanneer een object korte tijd aan het zicht onttrokken is (occlusie). De resultaten komen in `outputs/Disassembly1/tracking/` (resp. `yolo_world_tracking/`, `grounding_dino_tracking/`, `sam3_tracking/`, `sam31_tracking/`):
 
 - `tracking_history.csv` – per frame één rij per track met `track_id`, `class_id`, `class_name`, `confidence`, `bbox_x1`..`bbox_y2`, `center_x`/`center_y` (bbox en center in pixels), `velocity_x`/`velocity_y` (verplaatsing in pixels per videoframe), `track_age` (videoframes sinds het ontstaan van de track), `frames_since_detection` (videoframes sinds de laatste detectie) en `status`. `track_age` en `frames_since_detection` gebruiken dezelfde bronframe-index als `frame_number`. Rijen met status `occluded` hebben geen bbox of confidence: het object was tijdelijk niet zichtbaar, maar de track blijft bestaan om de occlusie te overbruggen. Rijen met status `tentative` zijn tracks die net gestart zijn en nog bevestigd moeten worden.
 - `tracking_debug.mp4` – debug-video met YOLO-bboxes, klassennamen, confidence, track-ID's en trajectories. Occluded tracks worden grijs weergegeven op hun voorspelde positie. De video wordt als H.264 (yuv420p) geschreven, zodat hij in VS Code, browsers en deelplatforms afspeelt; OpenCV's standaard mp4v-formaat doet dat niet.

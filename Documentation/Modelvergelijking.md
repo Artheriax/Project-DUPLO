@@ -158,10 +158,13 @@ run_yolo_world_test.bat
 run_yolo_seg_test.bat
 run_sam3_test.bat               :: vereist HF-toegang tot facebook/sam3 + 'hf auth login'
 run_sam31_test.bat              :: vereist HF-toegang tot facebook/sam3.1 of een lokaal checkpoint
+run_sam31_tracking_test.bat     :: SAM 3.1-detecties volgen met ByteTrack
 run_compare_models.bat          :: schrijft outputs\Disassembly1\comparison\model_comparison.{csv,md}
 ```
 
-De trackingvarianten hebben geen aparte `.bat`-wrapper; start ze direct via Python, bijvoorbeeld:
+Voor YOLO + ByteTrack gebruik je `run_tracking_test.bat`; voor SAM 3.1 + ByteTrack
+is er `run_sam31_tracking_test.bat`. De overige trackingvarianten kun je direct
+via Python starten, bijvoorbeeld:
 
 ```bat
 .venv\Scripts\python.exe src\run_yolo_world_tracking.py --config configs\baseline.yaml --device gpu
