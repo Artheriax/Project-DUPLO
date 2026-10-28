@@ -29,6 +29,30 @@ clip @git+https://github.com/ultralytics/CLIP.git@7ffa84b3bfa40c42ecc1c77147a855
 # (SAM3SemanticPredictor) en heeft geen extra package nodig; de gewichten van
 # facebook/sam3.1 vereisen wel een goedgekeurde Hugging Face-toegangsaanvraag
 # + 'huggingface-cli login' (of 'hf auth login').
+# VITRA (optionele handactie-voorspelling): de officiele repo wordt naar
+# third_party/VITRA gecloned en via sys.path geladen. Installeer VITRA zelf
+# NIET met pip: zijn pyproject pint torch 2.3.0, transformers 4.47.1 en
+# numpy<2, wat de rest van dit project zou breken. Alleen deze runtime-
+# dependencies zijn nodig; de PaliGemma-API van transformers 5.x wordt in
+# src/duplo/vitra.py opgevangen.
+sentencepiece==0.2.2
+accelerate==1.15.0
+# VITRA HaWoR/MoGe/MANO-handreconstructie. Initialiseer eerst de submodules:
+#   git -C third_party/VITRA submodule update --init --recursive
+# chumpy staat hier bewust niet tussen: dat pakket faalt met pip-build-isolatie.
+# Installeer het eenmalig met:
+#   pip install --no-build-isolation --no-deps chumpy@git+https://github.com/mattloper/chumpy
+smplx==0.1.28
+yacs==0.1.8
+pytorch_lightning==2.6.6
+omegaconf==2.4.0
+scikit-image==0.26.0
+trimesh==5.2.0
+utils3d @ git+https://github.com/EasternJournalist/utils3d.git@d790d33
+moderngl==5.13.0
+plyfile==1.1.5
+# HaWoR's YOLO-detector vereist dill (Ultralytics installeert het anders zelf).
+dill==0.4.1
 # Voor GPU: torch CUDA-build (2.14.1+cu130) wordt NIET via requirements
 # geinstalleerd, maar via ensure_cuda_torch() met
 # --index-url https://download.pytorch.org/whl/cu130 (opt-in met

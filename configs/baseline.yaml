@@ -49,6 +49,30 @@ save_yolo_world_video: true
 save_yolo_seg_video: true
 save_grounding_dino_video: true
 save_sam3_video: true
+# VITRA (zero-shot handactie-voorspelling; https://github.com/microsoft/VITRA)
+vitra_repo_path: "third_party/VITRA"           # eenmalig clonen; niet in git
+vitra_config_path: "VITRA-VLA/VITRA-VLA-3B"    # HF-repo-id of lokaal config.json
+# vitra_model_path: "VITRA-VLA/VITRA-VLA-3B"   # optioneel: lokaal .pt-bestand of HF-repo-id
+# vitra_statistics_path: "..."                 # optioneel: dataset_statistics.json
+vitra_instruction: "Left hand: None. Right hand: Pick up the tool and disassemble the DUPLO model."
+vitra_hands: ["left", "right"]                  # "left", "right" of beide; beide handen kosten nauwelijks extra tijd
+vitra_frame_stride: 30                          # ~1 predictie per seconde bij 30 fps (3B-model is zwaar)
+vitra_sample_times: 1                           # aantal actiesamples per frame (debug toont sample 0)
+vitra_ddim_steps: 10                            # diffusie-stappen in VITRA's actiekop
+vitra_cfg_scale: 5.0                            # classifier-free guidance
+# vitra_fov_deg: [60, 60]                       # null = fov_x uit statebestand + fov_y uit beeldverhouding, anders 60/60
+# vitra_state_path: "third_party/VITRA/examples/0002.npy"  # statische MANO-state (voorbeeld of eigen bestand)
+vitra_reconstruct_hands: true                    # HaWoR + MoGe + MANO per gesampled frame (vereist MANO_RIGHT.pkl)
+vitra_reuse_states: true                         # hergebruik vitra_hand_states.npz als dat al bestaat
+vitra_runtime_path: "third_party/vitra_runtime"  # gepinde transformers 4.47.1 voor de VITRA-inferentie
+# vitra_states_path: "outputs/Disassembly1/vitra/vitra_hand_states.npz"  # expliciet ander statebestand
+vitra_hawor_model_path: "third_party/VITRA/weights/hawor/checkpoints/hawor.ckpt"
+vitra_hawor_detector_path: "third_party/VITRA/weights/hawor/external/detector.pt"
+vitra_moge_model_name: "Ruicheng/moge-2-vitl"
+vitra_mano_path: "third_party/VITRA/weights/mano"
+vitra_image_size: 224                           # korte zijde die VITRA verwacht
+save_vitra_video: true                          # debug-video met instructie en voorspelde handbaan
+vitra_debug_repeat_frames: true                  # herhaal elk voorspelframe tot de bronfps (anders 1 fps video)
 # Snelheid (detectie-neutraal: zelfde imgsz/drempels/gewichten, alleen snellere kernels/codering)
 yolo_half: true                            # FP16-inferentie op CUDA (Ultralytics half=True)
 yolo_fuse: true                            # Conv+BN fusie voor YOLO-modellen

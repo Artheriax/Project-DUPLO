@@ -166,6 +166,9 @@ models/
 *.task
 outputs/
 
+# Externe modelrepositories (o.a. microsoft/VITRA), eenmalig clonen
+third_party/
+
 # Local video data
 data/*.mp4
 

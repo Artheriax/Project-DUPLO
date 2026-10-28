@@ -314,7 +314,8 @@ Mogelijke kandidaten zijn:
 * temporal action detection;
 * video classification;
 * een eigen lichtgewicht temporal model;
-* een combinatie van tool trajectories en hand landmarks.
+* een combinatie van tool trajectories en hand landmarks;
+* zero-shot handactie-voorspelling met VITRA (`src/run_vitra_test.py`; zie de README).
 
 De keuze wordt gebaseerd op:
 
