@@ -133,6 +133,15 @@ Zonder argument gebruiken de scripts de waarde van `device` in `configs\baseline
 
 **MediaPipe:** in de huidige Windows-build van mediapipe is de GPU-delegate niet beschikbaar. `--device gpu` wordt geaccepteerd, maar het script meldt dit en valt terug op CPU.
 
+## Acties die we gaan herkennen
+
+- schroeven losdraaien
+- schroeven vastdraaien
+- gereedschap pakken
+- gereedschap neerleggen
+- opwippen van een onderdeel
+- roteren van onderdeel
+
 ## Voortgang
 
 Tijdens het draaien wordt de voortgang direct getoond: in een console een balk die op één regel bijwerkt, en bij vastgelegde uitvoer (logbestand of IDE-paneel) voortgangsregels bij elke 10% of elke 5 seconden.
