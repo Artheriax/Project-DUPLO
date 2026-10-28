@@ -1,4 +1,5 @@
 """MediaPipe Hands op een video; logt 21 landmerken per hand naar CSV."""
+import sys
 import time
 from pathlib import Path
 from urllib.request import urlretrieve
@@ -65,6 +66,16 @@ def draw_all_hands(frame, hand_landmarks):
     return annotated
 
 
+def draw_frame_counter(frame, frame_idx: int):
+    """Toon het oorspronkelijke videoframenummer op een debugframe."""
+    counter = f"Frame: {frame_idx}"
+    origin = (12, 32)
+    cv2.putText(frame, counter, origin, cv2.FONT_HERSHEY_SIMPLEX, 0.9,
+                (0, 0, 0), 5, cv2.LINE_AA)
+    cv2.putText(frame, counter, origin, cv2.FONT_HERSHEY_SIMPLEX, 0.9,
+                (255, 255, 255), 2, cv2.LINE_AA)
+
+
 def create_landmarker(cfg: dict, model_path: Path, delegate) -> vision.HandLandmarker:
     options = vision.HandLandmarkerOptions(
         base_options=python.BaseOptions(
@@ -84,7 +95,13 @@ def main(cfg_path: str, device: str | None = None) -> None:
 
     device = resolve_device(device, cfg)
     model_path = get_model_path(cfg)
-    if device == "gpu":
+    if device == "gpu" and sys.platform == "win32":
+        print("MediaPipe GPU-delegate is niet beschikbaar in de Windows-build; "
+              "gebruik CPU.")
+        device = "cpu"
+        hands = create_landmarker(
+            cfg, model_path, python.BaseOptions.Delegate.CPU)
+    elif device == "gpu":
         try:
             hands = create_landmarker(
                 cfg, model_path, python.BaseOptions.Delegate.GPU)
@@ -131,10 +148,10 @@ def main(cfg_path: str, device: str | None = None) -> None:
                         save_screenshot(out_dir, "hand_frame", frame_idx,
                                         annotated)
                 if video is not None:
-                    # Zonder handen geen kopie/tekenwerk: schrijf het frame
-                    # direct weg (zelfde beeld, minder CPU).
-                    video.write(draw_all_hands(frame, res.hand_landmarks)
-                                if has_hands else frame)
+                    debug_frame = (draw_all_hands(frame, res.hand_landmarks)
+                                   if has_hands else frame.copy())
+                    draw_frame_counter(debug_frame, frame_idx)
+                    video.write(debug_frame)
     finally:
         # Ook bij een onderbreking de debug-video netjes afsluiten.
         if video is not None:
