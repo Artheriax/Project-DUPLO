@@ -1,0 +1,115 @@
+{
+  "model": "HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
+  "model_revision": "7b375e1b73b11138ff12fe22c8f2822d8fe03467",
+  "video": "/Users/doahismail/Downloads/testvidDUPLOdm.mp4",
+  "video_sha256": "230620064e5c3925a5204ffa62dbb9e324663ac43214166e54cb7ba6e29bb50a",
+  "start_seconds": 223.0,
+  "end_seconds": 230.0,
+  "fps": 30.0,
+  "number_of_frames": 8,
+  "frame_indices": [
+    6690,
+    6719,
+    6749,
+    6779,
+    6809,
+    6839,
+    6869,
+    6899
+  ],
+  "frame_times_seconds": [
+    223.0,
+    223.96666666666667,
+    224.96666666666667,
+    225.96666666666667,
+    226.96666666666667,
+    227.96666666666667,
+    228.96666666666667,
+    229.96666666666667
+  ],
+  "input_method": "Chronological multi-image input, without audio",
+  "preprocessing": {
+    "do_image_splitting": false,
+    "longest_edge": 384
+  },
+  "labels": {
+    "A1": {
+      "nl": "Gereedschap pakken of wisselen",
+      "en": "A person picks up or switches a hand tool."
+    },
+    "A2": {
+      "nl": "Product positioneren",
+      "en": "A person repositions or rotates the product."
+    },
+    "A3": {
+      "nl": "Losschroeven",
+      "en": "A person loosens a screw using a screwdriver."
+    },
+    "A4": {
+      "nl": "Kabel of connector loskoppelen",
+      "en": "A person disconnects a cable connector."
+    },
+    "A5": {
+      "nl": "Component verwijderen",
+      "en": "A person removes a component from the product."
+    }
+  },
+  "prompt": "These images are sampled in chronological order from one seven-second video clip. Select the single action that best describes the action performed during this clip.\n\nA1: A person picks up or switches a hand tool.\nA2: A person repositions or rotates the product.\nA3: A person loosens a screw using a screwdriver.\nA4: A person disconnects a cable connector.\nA5: A person removes a component from the product.\n\nReply with only one code: A1, A2, A3, A4, or A5.",
+  "formatted_chat": "<|im_start|>User: Time within clip: 0.00 seconds.<image>Time within clip: 0.97 seconds.<image>Time within clip: 1.97 seconds.<image>Time within clip: 2.97 seconds.<image>Time within clip: 3.97 seconds.<image>Time within clip: 4.97 seconds.<image>Time within clip: 5.97 seconds.<image>Time within clip: 6.97 seconds.<image>These images are sampled in chronological order from one seven-second video clip. Select the single action that best describes the action performed during this clip.\n\nA1: A person picks up or switches a hand tool.\nA2: A person repositions or rotates the product.\nA3: A person loosens a screw using a screwdriver.\nA4: A person disconnects a cable connector.\nA5: A person removes a component from the product.\n\nReply with only one code: A1, A2, A3, A4, or A5.<end_of_utterance>\nAssistant:",
+  "device": "cpu",
+  "dtype": "torch.float32",
+  "threads": 4,
+  "attention": "eager",
+  "do_sample": false,
+  "max_new_tokens": 16,
+  "raw_answer": "A2.",
+  "predicted_code": "A2",
+  "predicted_label_nl": "Product positioneren",
+  "generation_seconds": 14.059951584087685,
+  "timing_scope": "model.generate only; excludes loading and preprocessing",
+  "scores": null,
+  "scores_note": "Text generation; no five-class scores calculated.",
+  "python": "3.11.18 (main, Oct 26 2026, 18:15:19) [Clang 20.1.8 ]",
+  "macOS": [
+    "13.5",
+    [
+      "",
+      "",
+      ""
+    ],
+    "arm64"
+  ],
+  "torch": "2.2.2",
+  "transformers": "4.51.3",
+  "numpy": "1.26.4",
+  "opencv": "4.10.0",
+  "input_shapes": {
+    "pixel_values": [
+      1,
+      8,
+      3,
+      512,
+      512
+    ],
+    "pixel_attention_mask": [
+      1,
+      8,
+      512,
+      512
+    ],
+    "input_ids": [
+      1,
+      755
+    ],
+    "attention_mask": [
+      1,
+      755
+    ]
+  },
+  "limitations": [
+    "One clip; not an accuracy evaluation.",
+    "Eight frames versus 32 in the X-CLIP test.",
+    "Five choices; no other/unknown category.",
+    "No independently confirmed reference label."
+  ]
+}

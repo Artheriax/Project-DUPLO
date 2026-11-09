@@ -1,0 +1,7 @@
+SmolVLM2 — technische proef
+Fragment: 03:43–03:50
+Ruw modelantwoord: A2.
+Actie: A2 — Product positioneren
+Rekentijd generatie: 14.1 seconden
+CPU, float32, 8 beelden in tijdsvolgorde.
+Dit is geen meting van nauwkeurigheid.

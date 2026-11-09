@@ -1,0 +1,97 @@
+{
+  "provenance": "Nieuwe uitvoering van test_xclip.py op de computer van de uitvoerder",
+  "recorded_at": "2026-11-09T13:00:11.874429+01:00",
+  "model": "microsoft/xclip-base-patch16-zero-shot",
+  "model_revision": "6746d6a5202bf24300cd9bf36f457f174483d41b",
+  "requested_revision": null,
+  "device": "cpu",
+  "torch_threads": 4,
+  "dtype": "torch.float32",
+  "python": "3.11.18 (main, Oct 26 2026, 18:15:19) [Clang 20.1.8 ]",
+  "macos": "13.5",
+  "architecture": "arm64",
+  "packages": {
+    "torch": "2.2.2",
+    "torchvision": "0.17.2",
+    "transformers": "4.44.2",
+    "numpy": "1.26.4",
+    "opencv-python": "4.10.0.84"
+  },
+  "video_filename": "testvidDUPLOdm.mp4",
+  "video_sha256": "230620064e5c3925a5204ffa62dbb9e324663ac43214166e54cb7ba6e29bb50a",
+  "start_seconds": 223,
+  "end_seconds_exclusive": 230,
+  "fps": 30.0,
+  "frame_indices": [
+    6690,
+    6696,
+    6703,
+    6710,
+    6716,
+    6723,
+    6730,
+    6737,
+    6743,
+    6750,
+    6757,
+    6764,
+    6770,
+    6777,
+    6784,
+    6791,
+    6797,
+    6804,
+    6811,
+    6818,
+    6824,
+    6831,
+    6838,
+    6845,
+    6851,
+    6858,
+    6865,
+    6872,
+    6878,
+    6885,
+    6892,
+    6899
+  ],
+  "frame_count": 32,
+  "inference_seconds": 6.870657000108622,
+  "timing_scope": "Alleen model-forward; exclusief laden, decoderen en preprocessing",
+  "scores": [
+    {
+      "code": "A5",
+      "label_nl": "Component verwijderen",
+      "prompt_en": "A person removes a component from the product.",
+      "score": 22.676483154296875
+    },
+    {
+      "code": "A3",
+      "label_nl": "Losschroeven",
+      "prompt_en": "A person loosens a screw using a screwdriver.",
+      "score": 21.352869033813477
+    },
+    {
+      "code": "A4",
+      "label_nl": "Kabel of connector loskoppelen",
+      "prompt_en": "A person disconnects a cable connector.",
+      "score": 21.186298370361328
+    },
+    {
+      "code": "A1",
+      "label_nl": "Gereedschap pakken of wisselen",
+      "prompt_en": "A person picks up or switches a hand tool.",
+      "score": 21.061922073364258
+    },
+    {
+      "code": "A2",
+      "label_nl": "Product positioneren",
+      "prompt_en": "A person repositions or rotates the product.",
+      "score": 19.066864013671875
+    }
+  ],
+  "predicted_label": "A5",
+  "ground_truth": null,
+  "limitation": "Gesloten keuze uit vijf acties; geen gekalibreerde kansen en geen accuracymeting."
+}
